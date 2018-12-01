@@ -7,3 +7,7 @@ contract_data
 *.disasm
 *.report
 .DS_Store
+*.disasm.log
+
+//jetbrain ide
+.idea

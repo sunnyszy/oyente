@@ -2,6 +2,33 @@
 
 **Note: The tool is currently under development, please report any bugs you may find.**
 
+## 516 Development
+
+* Use ubuntu to develop
+* Install docker
+* Open remote API for dockerd:
+    https://success.docker.com/article/how-do-i-enable-the-remote-api-for-dockerd
+* Install oyente image
+    https://hub.docker.com/r/hrishioa/oyente/
+* Install pycharm professional version
+* Set oytent docker as project intepreter in Pycharm:
+    https://www.jetbrains.com/help/pycharm/using-docker-as-a-remote-interpreter.html
+* In Pycharm oyente.py run configuration, add z3 path:
+    PYTHONPATH=/home/oyente/dependencies/z3-z3-4.4.1/build
+* Run oyente.py /home/oyente/oyente/greeter.sol in Pycharm. Should able to see:
+```log
+47f9b1891177:/home/oyente/dependencies/venv/bin/python -u /opt/project/oyente.py /home/oyente/oyente/greeter.sol
+Contract greeter:
+Running, please wait...
+	============ Results ===========
+	  CallStack Attack: 	 False
+	  Concurrency Bug: 	 False
+	  Time Dependency: 	 False
+	  Reentrancy bug exists: False
+	====== Analysis Completed ======
+
+Process finished with exit code 0
+```
 ## Quick Start
 
 A container with the dependencies set up and the blockchain snapshot installed can be found [here](https://hub.docker.com/r/hrishioa/oyente/).
