@@ -94,8 +94,8 @@ def rename_vars(pcs, global_states):
     for expr in pcs:
         list_vars = get_vars(expr)
         for var in list_vars:
-            if var in vars_mapping:
-                expr = substitute(expr, (var, vars_mapping[var]))
+            if var.sexpr() in vars_mapping:
+                expr = substitute(expr, (var, vars_mapping[var.sexpr()]))
                 continue
             var_name = var.decl().name()
             # check if a var is global
@@ -107,8 +107,8 @@ def rename_vars(pcs, global_states):
             # otherwise, change the name of the variable
             new_var_name = var_name + '_old'
             new_var = BitVec(new_var_name, 256)
-            vars_mapping[var] = new_var
-            expr = substitute(expr, (var, vars_mapping[var]))
+            vars_mapping[var.sexpr()] = new_var
+            expr = substitute(expr, (var, vars_mapping[var.sexpr()]))
         ret_pcs.append(expr)
 
     ret_gs = {}
@@ -119,8 +119,8 @@ def rename_vars(pcs, global_states):
         if is_expr(expr):
             list_vars = get_vars(expr)
             for var in list_vars:
-                if var in vars_mapping:
-                    expr = substitute(expr, (var, vars_mapping[var]))
+                if var.sexpr() in vars_mapping:
+                    expr = substitute(expr, (var, vars_mapping[var.sexpr()]))
                     continue
                 var_name = var.decl().name()
                 # check if a var is global
@@ -132,8 +132,8 @@ def rename_vars(pcs, global_states):
                 # otherwise, change the name of the variable
                 new_var_name = var_name + '_old'
                 new_var = BitVec(new_var_name, 256)
-                vars_mapping[var] = new_var
-                expr = substitute(expr, (var, vars_mapping[var]))
+                vars_mapping[var.sexpr()] = new_var
+                expr = substitute(expr, (var, vars_mapping[var.sexpr()]))
         ret_gs[storage_addr] = expr
 
     return ret_pcs, ret_gs

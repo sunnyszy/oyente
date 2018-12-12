@@ -1,6 +1,6 @@
 import json
 import glob
-from tqdm import tqdm
+# from tqdm import tqdm
 import os
 import sys
 import urllib2
@@ -13,7 +13,7 @@ cjson = {}
 
 print "Loading contracts..."
 
-for cfile in tqdm(cfiles):
+for cfile in cfiles:
 	cjson.update(json.loads(open(cfile).read()))
 
 results = {}
@@ -36,8 +36,8 @@ if len(sys.argv)>=3:
 	job = int(sys.argv[2])
 	contracts = contracts[(len(contracts)/cores)*job:(len(contracts)/cores)*(job+1)]
 	print "Job %d: Running on %d contracts..." % (job, len(contracts))
-
-for c in tqdm(contracts):
+cntnum = 0
+for c in contracts:
 	with open('tmp.evm','w') as of:
 		# print "Out: "+cjson[c][1][2:]
 		of.write(cjson[c][1][2:]+"\0")
@@ -51,5 +51,7 @@ for c in tqdm(contracts):
 	with open('missed.json', 'w') as of:
 		of.write(json.dumps(missed,indent=1))
 	urllib2.urlopen('https://dweet.io/dweet/for/oyente-%d-%d?completed=%d&missed=%d&remaining=%d' % (job,cores,len(results),len(missed),len(contracts)-len(results)-len(missed)))
-
+	if cntnum == 5:
+		break
+	cntnum += 1
 print "Completed."
