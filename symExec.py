@@ -41,6 +41,7 @@ vertices = {}
 edges = {}
 money_flow_all_paths = []
 reentrancy_all_paths =[]
+earlypay_all_paths =[]
 data_flow_all_paths = [[], []] # store all storage addresses
 path_conditions = [] # store the path condition corresponding to each path in money_flow_all_paths
 all_gs = [] # store global variables, e.g. storage, balance of all paths
@@ -126,11 +127,14 @@ def main():
 	if DATA_FLOW:
 		detect_data_concurrency()
 		detect_data_money_concurrency()
+		run_early_pay_attack()
 	if PRINT_MODE:
 		print "Results for Reentrancy Bug: " + str(reentrancy_all_paths)
 	reentrancy_bug_found = any([v for sublist in reentrancy_all_paths for v in sublist])
 	print "\t  Reentrancy bug exists: %s" % str(reentrancy_bug_found)
 	results['reentrancy'] = reentrancy_bug_found
+
+
 
 def closing_message():
 	print "\t====== Analysis Completed ======"
@@ -454,7 +458,7 @@ def sym_exec_block(start, visited, stack, mem, global_state, path_conditions_and
 	for instr in block_ins:
 		# print """Inst: %d """ %(start+inscnt)+instr
 		inscnt += 1
-		sym_exec_ins(start, instr, stack, mem, global_state, path_conditions_and_vars, analysis)
+		sym_exec_ins(start, start+inscnt, instr, stack, mem, global_state, path_conditions_and_vars, analysis)
 
 	# Mark that this basic block in the visited blocks
 	visited.append(start)
@@ -467,6 +471,7 @@ def sym_exec_block(start, visited, stack, mem, global_state, path_conditions_and
 		total_no_of_paths += 1
 		# global_pc.append(path_conditions_and_vars["path_condition"])
 		reentrancy_all_paths.append(analysis["reentrancy_bug"])
+		earlypay_all_paths.extend(analysis["earlypay_bug"])
 		if analysis["money_flow"] not in money_flow_all_paths:
 			money_flow_all_paths.append(analysis["money_flow"])
 			path_conditions.append(path_conditions_and_vars["path_condition"])
@@ -563,14 +568,14 @@ def sym_exec_block(start, visited, stack, mem, global_state, path_conditions_and
 
 
 # Symbolically executing an instruction
-def sym_exec_ins(start, instr, stack, mem, global_state, path_conditions_and_vars, analysis):
+def sym_exec_ins(start, cur, instr, stack, mem, global_state, path_conditions_and_vars, analysis):
 	# print("""step %d""", instr)
 	instr_parts = str.split(instr, ' ')
 
 	# collecting the analysis result by calling this skeletal function
 	# this should be done before symbolically executing the instruction,
 	# since SE will modify the stack and mem
-	update_analysis(analysis, instr_parts[0], stack, mem, global_state, path_conditions_and_vars)
+	update_analysis(analysis, instr_parts[0], stack, mem, global_state, path_conditions_and_vars, cur)
 
 	if PRINT_MODE: print "=============================="
 	if PRINT_MODE: print "EXECUTING: " + instr
@@ -1467,6 +1472,13 @@ def run_callstack_attack():
 	print "\t  CallStack Attack: \t %s" % result
 
 	results['callstack'] = result
+
+def run_early_pay_attack():
+	tmp = sorted(set(earlypay_all_paths))
+	if (len(tmp) > 0) :
+		print "\t  EarlyPay Warning Founded in: " + str(tmp)
+	else:
+		print "\t  EarlyPay Warning:\t False"
 
 
 def print_state(block_address, stack, mem, global_state):
