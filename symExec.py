@@ -280,6 +280,7 @@ def print_cfg():
 # 2. Then identify each basic block (i.e. one-in, one-out)
 # 3. Store them in vertices
 def collect_vertices(tokens):
+    global instructions, end_ins_dict, jump_type
     current_ins_address = 0
     last_ins_address = 0
     is_new_line = True
@@ -362,6 +363,7 @@ def collect_vertices(tokens):
 
 
 def construct_bb():
+    global vertices, edges
     sorted_addresses = sorted(instructions.keys())
     size = len(sorted_addresses)
     for key in end_ins_dict:
@@ -383,6 +385,7 @@ def construct_static_edges():
 
 
 def add_falls_to():
+    global vertices, edges
     key_list = sorted(jump_type.keys())
     length = len(key_list)
     for i, key in enumerate(key_list):
@@ -519,6 +522,7 @@ def sym_exec_block(start, visited, stack, mem, global_state, path_conditions_and
                 if PRINT_MODE: print "INFEASIBLE PATH DETECTED"
             else:
                 left_branch = vertices[start].get_jump_target()
+                # deepcopy state
                 stack1 = list(stack)
                 mem1 = dict(mem)
                 global_state1 = my_copy_dict(global_state)
@@ -776,17 +780,17 @@ def sym_exec_ins(start, cur, instr, stack, mem, global_state, path_conditions_an
             path_conditions_and_vars[new_var_name] = new_var
             stack.insert(0, new_var)
             '''
-			if isinstance(index, (int, long)):
-				t = 256 - 8 * (index + 1)
-				if isinstance(content, (int, long)):
-					# TODO
-				else:
-					for i in range(0, 255):
+            if isinstance(index, (int, long)):
+                t = 256 - 8 * (index + 1)
+                if isinstance(content, (int, long)):
+                    # TODO
+                else:
+                    for i in range(0, 255):
 
-			else:
-				# DON'T KNOW WHAT could be the resulting value
-				# we then create a new symbolic variable
-			'''
+            else:
+                # DON'T KNOW WHAT could be the resulting value
+                # we then create a new symbolic variable
+            '''
         else:
             raise ValueError('STACK underflow')
     #
