@@ -87,10 +87,11 @@ def main():
 
     FNULL = open(os.devnull, 'w')
 
-    solc_p = subprocess.Popen(shlex.split(solc_cmd % args.source), stdout=subprocess.PIPE, stderr=FNULL)
-    solc_out = solc_p.communicate()
+    solc_p = subprocess.Popen(shlex.split(solc_cmd % args.source), stdout = subprocess.PIPE, stderr= subprocess.PIPE)
+    solc_out, solc_err = solc_p.communicate()
+    print(solc_err)
 
-    for (cname, bin_str) in re.findall(r"\n======= (.*?) =======\nBinary of the runtime part: \n(.*?)\n", solc_out[0]):
+    for (cname, bin_str) in re.findall(r"\n======= (.*?) =======\nBinary of the runtime part: \n(.*?)\n", solc_out):
         print "Contract %s:" % cname
         bin_str += "\0"
 
