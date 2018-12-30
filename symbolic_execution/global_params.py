@@ -8,10 +8,10 @@ REPORT_MODE = 0
 PRINT_MODE = 0
 
 # enable data flow analysis (incomplete yet)
-DATA_FLOW = 1
+DATA_FLOW = 0
 
 # enable log file to print all exception
-DEBUG_MODE = 1
+DEBUG_MODE = 0
 
 # check false positive in concurrency
 CHECK_CONCURRENCY_FP = 1
