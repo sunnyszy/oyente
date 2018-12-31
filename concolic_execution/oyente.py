@@ -116,7 +116,7 @@ def main():
             global_params.UNIT_TEST, global_params.GLOBAL_TIMEOUT, global_params.PRINT_PATHS,
             cname + ".json" if args.json else ""))
 
-        os.system('python symExec.py %s.evm.disasm %d %d %d %d %d %d %d %d %d %d %s' % (
+        os.system('python concExec.py %s.evm.disasm %d %d %d %d %d %d %d %d %d %d %s' % (
             cname, global_params.IGNORE_EXCEPTIONS, global_params.REPORT_MODE, global_params.PRINT_MODE,
             global_params.DATA_FLOW, global_params.DEBUG_MODE, global_params.CHECK_CONCURRENCY_FP,
             global_params.TIMEOUT,

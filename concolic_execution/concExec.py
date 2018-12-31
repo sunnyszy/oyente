@@ -11,6 +11,7 @@ import time
 from global_params import *
 import sys
 import atexit
+import random
 
 results = {}
 
@@ -31,13 +32,22 @@ if REPORT_MODE:
     rfile = open(report_file, 'w')
 
 count_unresolved_jumps = 0
-gen = Generator()  # to generate names for symbolic variables
+gen = None  # to generate names for symbolic variables
 
 end_ins_dict = {}  # capturing the last statement of each basic block
 instructions = {}  # capturing all the instructions, keys are corresponding addresses
 jump_type = {}  # capturing the "jump type" of each basic block
 vertices = {}
 edges = {}
+
+"""
+concolic flag
+"""
+all_linear = 1
+all_locs_definite = 1
+forcing_ok = 1
+
+
 money_flow_all_paths = []
 reentrancy_all_paths = []
 earlypay_all_paths = []
@@ -152,7 +162,7 @@ def build_cfg_and_analyze():
         collect_vertices(tokens)
         construct_bb()
         construct_static_edges()
-        full_sym_exec()  # jump targets are constructed on the fly
+        full_concolic_exec()  # jump targets are constructed on the fly
 
 
 # Detect if a money flow depends on the timestamp
@@ -396,15 +406,28 @@ def add_falls_to():
 
 
 def get_init_global_state(path_conditions_and_vars):
+    global vars_concrete, I_vars, I_balance
     global_state = {"balance": {}}
+    global_state_concrete = {"balance": {}}
+
+    # the address
     for new_var_name in ("Is", "Ia"):
         if new_var_name not in path_conditions_and_vars:
             new_var = BitVec(new_var_name, 256)
             path_conditions_and_vars[new_var_name] = new_var
+            if new_var_name not in I_vars:
+                I_vars[new_var_name] = random.randint(0, 2 ** 256 - 1)
+            vars_concrete[new_var_name] = I_vars[new_var_name]
 
     deposited_value = BitVec("Iv", 256)
     path_conditions_and_vars["Iv"] = deposited_value
+    if "Iv" not in I_vars:
+        # rough estimate upper bound.
+        # See https://ethereum.stackexchange.com/questions/16825/is-there-a-max-amount-of-gas-per-transaction
+        I_vars["Iv"] = random.randint(0, 1e20)
+    vars_concrete["Iv"] = I_vars["Iv"]
 
+    # the balance
     init_is = BitVec("init_Is", 256)
     init_ia = BitVec("init_Ia", 256)
 
@@ -418,25 +441,82 @@ def get_init_global_state(path_conditions_and_vars):
     # update the balances of the "caller" and "callee"
 
     global_state["balance"]["Is"] = (init_is - deposited_value)
+    if I_vars["Is"] not in I_balance:
+        I_balance[I_vars["Is"]] = random.randint(0, 2 ** 256 - 1 - vars_concrete["Iv"])
+    global_state_concrete["balance"]["Is"] = I_balance[I_vars["Is"]]
+
     global_state["balance"]["Ia"] = (init_ia + deposited_value)
+    if I_vars["Ia"] not in I_balance:
+        I_balance[I_vars["Ia"]] = random.randint(vars_concrete["Iv"], 2 ** 256 - 1)
+    global_state_concrete["balance"]["Ia"] = I_balance[I_vars["Ia"]]
 
     # the state of the current current contract
     global_state["Ia"] = {}
+    global_state_concrete["Ia"] = {}
     global_state["miu_i"] = 0
+    global_state_concrete["miu_i"] = 0
 
-    return global_state
+    return global_state, global_state_concrete
 
 
-def full_sym_exec():
+def full_concolic_exec():
+    global all_linear, all_locs_definite, forcing_ok
+
+    # init concrete flag
+    all_linear, all_locs_definite, forcing_ok = 1, 1, 1
+
+    # init concrete trace stack
+    trace_stack = []
+    global I_vars, I_gen, I_balance
+    I_vars = {}  # init for specific var, e.g., Is
+    I_gen = {}  # init for calldataload
+    I_balance = {}  # init for global balance
+
+    # todo: implement var_constraint to prevent false positive
+    global I_constraint
+    I_constraint = []
+
+    directed = 1
+    while directed:
+        try:
+            directed = instrumented_program(trace_stack)
+        except Exception as _e:
+            print(_e)
+            # execution won't stop on exception as there are multiple potential bugs
+
+
+def instrumented_program(trace_stack):
+    global gen, vars_concrete
     # executing, starting from beginning
+
     stack = []
-    path_conditions_and_vars = {"path_condition": []}
-    visited = []
+    stack_concrete = []
+
     mem = {}
-    global_state = get_init_global_state(
-        path_conditions_and_vars)  # this is init global state for this particular execution
+    mem_concrete = {}
+
+    gen = Generator()
+
+    path_constraint_branch = []
+
+    visited = []
+
+    path_conditions_and_vars = {"path_condition": []}
+    vars_concrete = {}
+
+    # this is init global state for this particular execution
+    global_state, global_state_concrete = get_init_global_state(path_conditions_and_vars)
     analysis = init_analysis()
-    return sym_exec_block(0, visited, stack, mem, global_state, path_conditions_and_vars, analysis)
+    l = 0
+
+    while True:
+        try:
+            sym_exec_block(l, visited, stack, mem, global_state, path_conditions_and_vars, analysis)
+        except Exception as e:
+            pass
+            # possibly break
+
+    return solve_path_constraint()
 
 
 # Symbolically executing a block from the start address
