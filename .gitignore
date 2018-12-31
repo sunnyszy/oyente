@@ -1,5 +1,6 @@
 tmp/
 tmp
+tmp.py
 *.pyc
 contract_data
 *.sol
