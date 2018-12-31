@@ -405,8 +405,8 @@ def add_falls_to():
             vertices[key].set_falls_to(target)
 
 
-def get_init_global_state(path_conditions_and_vars):
-    global vars_concrete, I_vars, I_balance
+def get_init_global_state(path_conditions_and_vars, vars_concrete):
+    global I_vars, I_balance
     global_state = {"balance": {}}
     global_state_concrete = {"balance": {}}
 
@@ -466,7 +466,7 @@ def full_concolic_exec():
     all_linear, all_locs_definite, forcing_ok = 1, 1, 1
 
     # init concrete trace stack
-    trace_stack = []
+    concolic_stack = []
     global I_vars, I_gen, I_balance
     I_vars = {}  # init for specific var, e.g., Is
     I_gen = {}  # init for calldataload
@@ -479,14 +479,18 @@ def full_concolic_exec():
     directed = 1
     while directed:
         try:
-            directed = instrumented_program(trace_stack)
+            directed = instrumented_program(concolic_stack)
         except Exception as _e:
             print(_e)
             # execution won't stop on exception as there are multiple potential bugs
 
 
-def instrumented_program(trace_stack):
-    global gen, vars_concrete
+def solve_path_constraint(k, concolic_path_constraint, concolic_stack):
+    pass
+
+
+def instrumented_program(concolic_stack):
+    global gen
     # executing, starting from beginning
 
     stack = []
@@ -497,7 +501,7 @@ def instrumented_program(trace_stack):
 
     gen = Generator()
 
-    path_constraint_branch = []
+    concolic_path_constraint = []
 
     visited = []
 
@@ -505,44 +509,60 @@ def instrumented_program(trace_stack):
     vars_concrete = {}
 
     # this is init global state for this particular execution
-    global_state, global_state_concrete = get_init_global_state(path_conditions_and_vars)
+    global_state, global_state_concrete = get_init_global_state(path_conditions_and_vars, vars_concrete)
     analysis = init_analysis()
     l = 0
+    k = 0
 
     while True:
-        try:
-            sym_exec_block(l, visited, stack, mem, global_state, path_conditions_and_vars, analysis)
-        except Exception as e:
-            pass
-            # possibly break
+        if_continue, l, k = sym_exec_block(
+            l, visited,
+            stack, stack_concrete,
+            mem, mem_concrete,
+            global_state, global_state_concrete,
+            path_conditions_and_vars, vars_concrete,
+            analysis,
+            k, concolic_path_constraint, concolic_stack)
+        if not if_continue:
+            break
 
-    return solve_path_constraint()
+    return solve_path_constraint(k, concolic_path_constraint, concolic_stack)
 
 
 # Symbolically executing a block from the start address
-def sym_exec_block(start, visited, stack, mem, global_state, path_conditions_and_vars, analysis):
+def sym_exec_block(start, visited,
+                   stack, stack_concrete,
+                   mem, mem_concrete,
+                   global_state, global_state_concrete,
+                   path_conditions_and_vars, vars_concrete,
+                   analysis,
+                   k, concolic_path_constraint, concolic_stack):
     if start < 0:
         if PRINT_MODE: print "ERROR: UNKNOWN JUMP ADDRESS. TERMINATING THIS PATH"
-        return ["ERROR"]
+        return False, -1, k
 
     if PRINT_MODE: print "\nDEBUG: Reach block address %d \n" % start
     if PRINT_MODE: print "STACK: " + str(stack)
 
     if start in visited:
         if PRINT_MODE: print "Seeing a loop. Terminating this path ... "
-        return stack
+        return False, -1, k
 
     # Execute every instruction, one at a time
     try:
         block_ins = vertices[start].get_instructions()
     except KeyError:
         if PRINT_MODE: print "This path results in an exception, possibly an invalid jump address"
-        return ["ERROR"]
+        return False, -1, k
     inscnt = 0
     for instr in block_ins:
         # print """Inst: %d """ %(start+inscnt)+instr
         inscnt += 1
-        sym_exec_ins(start, start + inscnt, instr, stack, mem, global_state, path_conditions_and_vars, analysis)
+        try:
+            sym_exec_ins(start, start + inscnt, instr, stack, mem, global_state, path_conditions_and_vars, analysis)
+        except Exception as e:
+            print(e)
+            return False, -1, k
 
     # Mark that this basic block in the visited blocks
     visited.append(start)
@@ -566,91 +586,34 @@ def sym_exec_block(start, visited, stack, mem, global_state, path_conditions_and
             if analysis["sstore"] not in data_flow_all_paths[1]:
                 data_flow_all_paths[1].append(analysis["sstore"])
         compare_stack_unit_test(stack)
+        return False, -1, k
     # if PRINT_MODE: print "Path condition = " + str(path_conditions_and_vars["path_condition"])
     # raw_input("Press Enter to continue...\n")
     elif jump_type[start] == "unconditional":  # executing "JUMP"
         successor = vertices[start].get_jump_target()
-        stack1 = list(stack)
-        mem1 = dict(mem)
-        global_state1 = my_copy_dict(global_state)
-        visited1 = list(visited)
-        path_conditions_and_vars1 = my_copy_dict(path_conditions_and_vars)
-        analysis1 = my_copy_dict(analysis)
-        sym_exec_block(successor, visited1, stack1, mem1, global_state1, path_conditions_and_vars1, analysis1)
+        return True, successor, k
     elif jump_type[start] == "falls_to":  # just follow to the next basic block
         successor = vertices[start].get_falls_to()
-        stack1 = list(stack)
-        mem1 = dict(mem)
-        global_state1 = my_copy_dict(global_state)
-        visited1 = list(visited)
-        path_conditions_and_vars1 = my_copy_dict(path_conditions_and_vars)
-        analysis1 = my_copy_dict(analysis)
-        sym_exec_block(successor, visited1, stack1, mem1, global_state1, path_conditions_and_vars1, analysis1)
+        return True, successor, k
     elif jump_type[start] == "conditional":  # executing "JUMPI"
 
         # A choice point, we proceed with depth first search
-
+        branch_expression_concrete = 1  #todo: concrete branch expression
         branch_expression = vertices[start].get_branch_expression()
 
-        if PRINT_MODE: print "Branch expression: " + str(branch_expression)
+        if PRINT_MODE: print "Branch expression: " + str(branch_expression) + " " + str(concolic_path_constraint)
 
-        solver.push()  # SET A BOUNDARY FOR SOLVER
-        solver.add(branch_expression)
-
-        try:
-            if solver.check() == unsat:
-                if PRINT_MODE: print "INFEASIBLE PATH DETECTED"
-            else:
-                left_branch = vertices[start].get_jump_target()
-                # deepcopy state
-                stack1 = list(stack)
-                mem1 = dict(mem)
-                global_state1 = my_copy_dict(global_state)
-                visited1 = list(visited)
-                path_conditions_and_vars1 = my_copy_dict(path_conditions_and_vars)
-                path_conditions_and_vars1["path_condition"].append(branch_expression)
-                analysis1 = my_copy_dict(analysis)
-                sym_exec_block(left_branch, visited1, stack1, mem1, global_state1, path_conditions_and_vars1, analysis1)
-        except Exception as e:
-            log_file.write(str(e))
-            print "Exception - " + str(e)
-            if not IGNORE_EXCEPTIONS:
-                if str(e) == "timeout":
-                    raise e
-
-        solver.pop()  # POP SOLVER CONTEXT
-
-        solver.push()  # SET A BOUNDARY FOR SOLVER
-        negated_branch_expression = Not(branch_expression)
-        solver.add(negated_branch_expression)
-
-        if PRINT_MODE: print "Negated branch expression: " + str(negated_branch_expression)
-
-        try:
-            if solver.check() == unsat:
-                # Note that this check can be optimized. I.e. if the previous check succeeds,
-                # no need to check for the negated condition, but we can immediately go into
-                # the else branch
-                if PRINT_MODE: print "INFEASIBLE PATH DETECTED"
-            else:
-                right_branch = vertices[start].get_falls_to()
-                stack1 = list(stack)
-                mem1 = dict(mem)
-                global_state1 = my_copy_dict(global_state)
-                visited1 = list(visited)
-                path_conditions_and_vars1 = my_copy_dict(path_conditions_and_vars)
-                path_conditions_and_vars1["path_condition"].append(negated_branch_expression)
-                analysis1 = my_copy_dict(analysis)
-                sym_exec_block(right_branch, visited1, stack1, mem1, global_state1, path_conditions_and_vars1,
-                               analysis1)
-        except Exception as e:
-            log_file.write(str(e))
-            if str(e) == "timeout":
-                raise e
-        solver.pop()  # POP SOLVER CONTEXT
-
+        if branch_expression_concrete:
+            left_branch = vertices[start].get_jump_target()
+            concolic_stack.append(branch_expression)
+            return True, left_branch, k+1
+        else:
+            right_branch = vertices[start].get_falls_to()
+            concolic_stack.append(Not(branch_expression))
+            return True, right_branch, k+1
     else:
-        raise Exception('Unknown Jump-Type')
+            print('Unknown Jump-Type')
+            return False, -1, k
 
 
 # Symbolically executing an instruction
