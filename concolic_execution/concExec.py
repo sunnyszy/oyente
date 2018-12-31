@@ -453,8 +453,8 @@ def get_init_global_state(path_conditions_and_vars, vars_concrete):
     # the state of the current current contract
     global_state["Ia"] = {}
     global_state_concrete["Ia"] = {}
+    # miu_i is always constant as address is always constant
     global_state["miu_i"] = 0
-    global_state_concrete["miu_i"] = 0
 
     return global_state, global_state_concrete
 
@@ -559,7 +559,12 @@ def sym_exec_block(start, visited,
         # print """Inst: %d """ %(start+inscnt)+instr
         inscnt += 1
         try:
-            sym_exec_ins(start, start + inscnt, instr, stack, mem, global_state, path_conditions_and_vars, analysis)
+            sym_exec_ins(start, start + inscnt, instr,
+                         stack, stack_concrete,
+                         mem, mem_concrete,
+                         global_state, global_state_concrete,
+                         path_conditions_and_vars, vars_concrete,
+                         analysis)
         except Exception as e:
             print(e)
             return False, -1, k
@@ -617,7 +622,12 @@ def sym_exec_block(start, visited,
 
 
 # Symbolically executing an instruction
-def sym_exec_ins(start, cur, instr, stack, mem, global_state, path_conditions_and_vars, analysis):
+def sym_exec_ins(start, cur, instr,
+                 stack, stack_concrete,
+                 mem, mem_concrete,
+                 global_state, global_state_concrete,
+                 path_conditions_and_vars, var_concrete,
+                 analysis):
     # print("""step %d""", instr)
     instr_parts = str.split(instr, ' ')
 
@@ -1185,37 +1195,19 @@ def sym_exec_ins(start, cur, instr, stack, mem, global_state, path_conditions_an
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "MSTORE":
         if len(stack) > 1:
-            stored_address = stack.pop(0)
+            # concolic execution omit the case storing to a symbolic address
+            stack.pop(0)
             stored_value = stack.pop(0)
+            stored_address_concrete = stack_concrete.pop(0)
+            stored_value_concrete = stack_concrete.pop(0)
             current_miu_i = global_state["miu_i"]
-            if isinstance(stored_address, (int, long)):
-                temp = long(ceil((stored_address + 32) / float(32)))
-                if temp > current_miu_i:
-                    current_miu_i = temp
-                mem[stored_address] = stored_value  # note that the stored_value could be symbolic
-                if PRINT_MODE: print "temp: " + str(temp)
-                if PRINT_MODE: print "current_miu_i: " + str(current_miu_i)
-            else:
-                if PRINT_MODE: print "Debugging... temp " + str(stored_address)
-                temp = ((stored_address + 31) / 32) + 1
-                if isinstance(current_miu_i, (int, long)):
-                    current_miu_i = BitVecVal(current_miu_i, 256)
-                if PRINT_MODE: print "current_miu_i: " + str(current_miu_i)
-                expression = current_miu_i < temp
-                if PRINT_MODE: print "Expression: " + str(expression)
-                solver.push()
-                solver.add(expression)
-                if solver.check() != unsat:
-                    # this means that it is possibly that current_miu_i < temp
-                    if expression == True:
-                        current_miu_i = temp
-                    else:
-                        current_miu_i = If(expression, temp, current_miu_i)
-                solver.pop()
-                mem.clear()  # very conservative
-                mem[str(stored_address)] = stored_value
-                if PRINT_MODE: print "temp: " + str(temp)
-                if PRINT_MODE: print "current_miu_i: " + str(current_miu_i)
+            temp = long(ceil((stored_address_concrete + 32) / float(32)))
+            if temp > current_miu_i:
+                current_miu_i = temp
+            mem[stored_address_concrete] = stored_value  # note that the stored_value could be symbolic
+            mem_concrete[stored_address_concrete] = stored_value_concrete  # note that the stored_value could be symbolic
+            if PRINT_MODE: print "temp: " + str(temp)
+            if PRINT_MODE: print "current_miu_i: " + str(current_miu_i)
             global_state["miu_i"] = current_miu_i
         else:
             raise ValueError('STACK underflow')
@@ -1329,6 +1321,7 @@ def sym_exec_ins(start, cur, instr, stack, mem, global_state, path_conditions_an
     elif instr_parts[0].startswith('PUSH', 0):  # this is a push instruction
         pushed_value = int(instr_parts[1], 16)
         stack.insert(0, pushed_value)
+        stack_concrete.insert(0, pushed_value)
     #
     #  80s: Duplication Operations
     #
