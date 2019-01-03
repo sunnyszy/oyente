@@ -30,10 +30,7 @@ class BasicBlock:
         return self.falls_to
 
     def set_jump_target(self, address):
-        if isinstance(address, (int, long)):
-            self.jump_target = address
-        else:
-            self.jump_target = -1
+        self.jump_target = address
 
     def get_jump_target(self):
         return self.jump_target

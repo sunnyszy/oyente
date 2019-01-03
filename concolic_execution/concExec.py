@@ -43,9 +43,9 @@ edges = {}
 """
 concolic flag
 """
-all_linear = 1
-all_locs_definite = 1
-forcing_ok = 1
+all_linear = True
+all_locs_definite = True
+forcing_ok = True
 
 
 money_flow_all_paths = []
@@ -463,7 +463,7 @@ def full_concolic_exec():
     global all_linear, all_locs_definite, forcing_ok
 
     # init concrete flag
-    all_linear, all_locs_definite, forcing_ok = 1, 1, 1
+    all_linear, all_locs_definite, forcing_ok = True, True, True
 
     # init concrete trace stack
     concolic_stack = []
@@ -479,14 +479,52 @@ def full_concolic_exec():
     directed = 1
     while directed:
         try:
-            directed = instrumented_program(concolic_stack)
+            directed, concolic_stack = instrumented_program(concolic_stack)
         except Exception as _e:
             print(_e)
             # execution won't stop on exception as there are multiple potential bugs
 
 
-def solve_path_constraint(k, concolic_path_constraint, concolic_stack):
-    pass
+def solve_path_constraint(k, concolic_path_constraint, concolic_stack, path_conditions_and_vars):
+    global I_vars, I_gen, I_balance
+    j = k - 1
+    while concolic_stack[j][1] and j >= 0:
+        j -= 1
+    if j == -1:
+        return 0, -1
+    else:
+        concolic_path_constraint[j] = Not(concolic_path_constraint[j])
+        concolic_stack[j][0] = 1 - concolic_stack[j][0]
+        solver.push()
+        for i in range(j+1):
+            solver.add(concolic_path_constraint[i])
+        if solver.check() == sat:
+            m = solver.model()
+            # update I
+            for v in I_vars:
+                if m[v] is not None:
+                    I_vars[v] = m[v]
+            for v in I_gen:
+                if m[v] is not None:
+                    I_gen[v] = m[v]
+            for v in I_balance:
+                if m[v] is not None:
+                    I_balance[v] = m[v]
+            return 1, concolic_stack[0:j+1]
+        else:
+            return solve_path_constraint(j, path_conditions, concolic_stack)
+
+
+def compare_and_update_stack(branch, k, stack):
+    global forcing_ok
+    if k < len(stack):
+        if stack[k][0] != branch:
+            forcing_ok = False
+            raise Exception("forcing ok")
+        elif k == len(stack) - 1:
+            stack[k][1] = 1
+    else:
+        stack.append([branch, 0])
 
 
 def instrumented_program(concolic_stack):
@@ -526,7 +564,7 @@ def instrumented_program(concolic_stack):
         if not if_continue:
             break
 
-    return solve_path_constraint(k, concolic_path_constraint, concolic_stack)
+    return solve_path_constraint(k, concolic_path_constraint, concolic_stack, path_conditions_and_vars)
 
 
 # Symbolically executing a block from the start address
@@ -603,18 +641,20 @@ def sym_exec_block(start, visited,
     elif jump_type[start] == "conditional":  # executing "JUMPI"
 
         # A choice point, we proceed with depth first search
-        branch_expression_concrete = 1  #todo: concrete branch expression
+        branch_expression_concrete = vertices[start].get_branch_expression_concrete()
         branch_expression = vertices[start].get_branch_expression()
 
         if PRINT_MODE: print "Branch expression: " + str(branch_expression) + " " + str(concolic_path_constraint)
 
         if branch_expression_concrete:
+            concolic_path_constraint.append(branch_expression)
+            compare_and_update_stack(1, k, concolic_stack)
             left_branch = vertices[start].get_jump_target()
-            concolic_stack.append(branch_expression)
             return True, left_branch, k+1
         else:
+            concolic_path_constraint.append(Not(branch_expression))
+            compare_and_update_stack(0, k, concolic_stack)
             right_branch = vertices[start].get_falls_to()
-            concolic_stack.append(Not(branch_expression))
             return True, right_branch, k+1
     else:
             print('Unknown Jump-Type')
@@ -628,6 +668,8 @@ def sym_exec_ins(start, cur, instr,
                  global_state, global_state_concrete,
                  path_conditions_and_vars, var_concrete,
                  analysis):
+    global all_linear, all_locs_definite
+    global I_gen
     # print("""step %d""", instr)
     instr_parts = str.split(instr, ' ')
 
@@ -673,25 +715,33 @@ def sym_exec_ins(start, cur, instr,
     elif instr_parts[0] == "SUB":
         if len(stack) > 1:
             first = stack.pop(0)
+            first_concrete = stack_concrete.pop(0)
             second = stack.pop(0)
+            second_concrete = stack_concrete.pop(0)
             if isinstance(first, (int, long)) and not isinstance(second, (int, long)):
                 first = BitVecVal(first, 256)
             elif not isinstance(first, (int, long)) and isinstance(second, (int, long)):
                 second = BitVecVal(second, 256)
             computed = first - second
+            computed_concrete = first_concrete - second_concrete
             stack.insert(0, computed)
+            stack_concrete.insert(0, computed_concrete)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "DIV":
         if len(stack) > 1:
             first = stack.pop(0)
+            first_concrete = stack_concrete.pop(0)
             second = stack.pop(0)
+            second_concrete = stack_concrete.pop(0)
             if isinstance(first, (int, long)) and not isinstance(second, (int, long)):
                 first = BitVecVal(first, 256)
             elif not isinstance(first, (int, long)) and isinstance(second, (int, long)):
                 second = BitVecVal(second, 256)
             computed = first / second
+            computed_concrete = simplify(BitVecVal(first_concrete, 256) / BitVecVal(second_concrete, 256)).as_long()
             stack.insert(0, computed)
+            stack_concrete.insert(0, computed_concrete)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "MOD":
@@ -812,17 +862,14 @@ def sym_exec_ins(start, cur, instr,
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "EXP":
         if len(stack) > 1:
-            base = stack.pop(0)
-            exponent = stack.pop(0)
-            # Type conversion is needed when they are mismatched
-            if isinstance(base, (int, long)) and isinstance(exponent, (int, long)):
-                computed = base ** exponent
-            else:
-                # The computed value is unknown, this is because power is
-                # not supported in bit-vector theory
-                new_var_name = gen.gen_arbitrary_var()
-                computed = BitVec(new_var_name, 256)
+            stack.pop(0)
+            stack.pop(0)
+            base_concrete = stack_concrete.pop(0)
+            exponent_concrete = stack_concrete.pop(0)
+            computed = base_concrete ** exponent_concrete
             stack.insert(0, computed)
+            stack_concrete.insert(0, computed)
+            all_linear = False
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "SIGNEXTEND":
@@ -909,7 +956,9 @@ def sym_exec_ins(start, cur, instr,
     elif instr_parts[0] == "EQ":
         if len(stack) > 1:
             first = stack.pop(0)
+            first_concrete = stack_concrete.pop(0)
             second = stack.pop(0)
+            second_concrete = stack_concrete.pop(0)
             if isinstance(first, (int, long)) and isinstance(second, (int, long)):
                 if first == second:
                     stack.insert(0, 1)
@@ -918,6 +967,8 @@ def sym_exec_ins(start, cur, instr,
             else:
                 sym_expression = If(first == second, BitVecVal(1, 256), BitVecVal(0, 256))
                 stack.insert(0, sym_expression)
+            sym_expression_concrete = 1 if first_concrete == second_concrete else 0
+            stack_concrete.insert(0, sym_expression_concrete)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "ISZERO":
@@ -1038,22 +1089,17 @@ def sym_exec_ins(start, cur, instr,
         stack.insert(0, new_var)
     elif instr_parts[0] == "CALLVALUE":  # get value of this transaction
         new_var_name = "Iv"
-        if new_var_name in path_conditions_and_vars:
-            new_var = path_conditions_and_vars[new_var_name]
-        else:
-            new_var = BitVec(new_var_name, 256)
-            path_conditions_and_vars[new_var_name] = new_var
-        stack.insert(0, new_var)
+        stack.insert(0, path_conditions_and_vars[new_var_name])
+        stack_concrete.insert(0, var_concrete[new_var_name])
     elif instr_parts[0] == "CALLDATALOAD":  # from input data from environment
         if len(stack) > 0:
-            position = stack.pop(0)
-            new_var_name = gen.gen_data_var(position)
-            if new_var_name in path_conditions_and_vars:
-                new_var = path_conditions_and_vars[new_var_name]
-            else:
-                new_var = BitVec(new_var_name, 256)
-                path_conditions_and_vars[new_var_name] = new_var
-            stack.insert(0, new_var)
+            # position is always a constant
+            stack.pop(0)
+            position = stack_concrete.pop(0)
+            if position not in I_gen:
+                I_gen[position] = random.randint(0, 2 ** 256 - 1)  # max 1024
+            stack.insert(0, BitVec('Id_'+str(position), 256))
+            stack_concrete.insert(0, I_gen[position])
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "CALLDATASIZE":  # from input data from environment
@@ -1197,7 +1243,9 @@ def sym_exec_ins(start, cur, instr,
     elif instr_parts[0] == "MSTORE":
         if len(stack) > 1:
             # concolic execution omit the case storing to a symbolic address
-            stack.pop(0)
+            stored_address = stack.pop(0)
+            if not isinstance(stored_address, (int, long)):
+                all_locs_definite = False
             stored_value = stack.pop(0)
             stored_address_concrete = stack_concrete.pop(0)
             stored_value_concrete = stack_concrete.pop(0)
@@ -1275,25 +1323,26 @@ def sym_exec_ins(start, cur, instr,
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "JUMP":
         if len(stack) > 0:
-            target_address = stack.pop(0)
-            vertices[start].set_jump_target(target_address)
-            if target_address not in edges[start]:
-                edges[start].append(target_address)
+            # address must be real
+            stack.pop(0)
+            target_address_concrete = stack_concrete.pop(0)
+            vertices[start].set_jump_target(target_address_concrete)
+            if target_address_concrete not in edges[start]:
+                edges[start].append(target_address_concrete)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "JUMPI":
         # WE need to prepare two branches
         if len(stack) > 1:
             target_address = stack.pop(0)
-            vertices[start].set_jump_target(target_address)
-            flag = stack.pop(0)
-            branch_expression = (BitVecVal(0, 1) == BitVecVal(1, 1))
-            if isinstance(flag, (int, long)):
-                if flag != 0:
-                    branch_expression = True
-            else:
-                branch_expression = (0 != flag)
-            vertices[start].set_branch_expression(branch_expression)
+            if not isinstance(target_address, (int, long)):
+                all_locs_definite = False
+            target_address_concrete = stack_concrete.pop(0)
+            vertices[start].set_jump_target(target_address_concrete)
+            b = stack_concrete.pop(0)
+            c = stack.pop(0)
+            vertices[start].set_branch_expression_concrete(b)
+            vertices[start].set_branch_expression(c != 0)
             if target_address not in edges[start]:
                 edges[start].append(target_address)
         else:
@@ -1330,7 +1379,9 @@ def sym_exec_ins(start, cur, instr,
         position = int(instr_parts[0][3:], 10) - 1
         if len(stack) > position:
             duplicate = stack[position]
+            duplicate_concrete = stack_concrete[position]
             stack.insert(0, duplicate)
+            stack_concrete.insert(0, duplicate_concrete)
         else:
             raise ValueError('STACK underflow')
 

@@ -44,6 +44,12 @@ class BasicBlock:
     def get_branch_expression(self):
         return self.branch_expression
 
+    def set_branch_expression_concrete(self, branch):
+        self.branch_expression_concrete = branch
+
+    def get_branch_expression_concrete(self):
+        return self.branch_expression_concrete
+
     def display(self):
         print "================"
         print "start address: %d" % self.start
