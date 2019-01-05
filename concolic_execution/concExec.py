@@ -500,16 +500,17 @@ def solve_path_constraint(k, concolic_path_constraint, concolic_stack, path_cond
             solver.add(concolic_path_constraint[i])
         if solver.check() == sat:
             m = solver.model()
-            # update I
-            for v in I_vars:
-                if m[v] is not None:
-                    I_vars[v] = m[v]
-            for v in I_gen:
-                if m[v] is not None:
-                    I_gen[v] = m[v]
-            for v in I_balance:
-                if m[v] is not None:
-                    I_balance[v] = m[v]
+            for d in m.decls():
+                name = d.name()
+                if name in I_vars:
+                    match_d = I_vars
+                elif name in I_gen:
+                    match_d = I_gen
+                elif name in I_balance:
+                    match_d = I_balance
+                else:
+                    raise KeyError('Got a variable not in I')
+                match_d[name] = m[d].as_long()
             return 1, concolic_stack[0:j+1]
         else:
             return solve_path_constraint(j, path_conditions, concolic_stack)
@@ -1096,10 +1097,11 @@ def sym_exec_ins(start, cur, instr,
             # position is always a constant
             stack.pop(0)
             position = stack_concrete.pop(0)
-            if position not in I_gen:
-                I_gen[position] = random.randint(0, 2 ** 256 - 1)  # max 1024
-            stack.insert(0, BitVec('Id_'+str(position), 256))
-            stack_concrete.insert(0, I_gen[position])
+            key = 'Id_'+str(position)
+            if key not in I_gen:
+                I_gen[key] = random.randint(0, 2 ** 256 - 1)  # max 1024
+            stack.insert(0, BitVec(key, 256))
+            stack_concrete.insert(0, I_gen[key])
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "CALLDATASIZE":  # from input data from environment
