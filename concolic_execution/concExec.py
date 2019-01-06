@@ -515,7 +515,7 @@ def solve_path_constraint(k, concolic_path_constraint, concolic_stack, path_cond
                 match_d[name] = m[d].as_long()
             return 1, concolic_stack[0:j+1]
         else:
-            return solve_path_constraint(j, path_conditions, concolic_stack)
+            return solve_path_constraint(j, path_conditions, concolic_stack, path_conditions_and_vars)
 
 
 def compare_and_update_stack(branch, k, stack):
@@ -654,11 +654,13 @@ def sym_exec_block(start, visited,
 
         if branch_expression_concrete:
             concolic_path_constraint.append(branch_expression)
+            path_conditions_and_vars["path_condition"].append(branch_expression)
             compare_and_update_stack(1, k, concolic_stack)
             left_branch = vertices[start].get_jump_target()
             return True, left_branch, k+1
         else:
             concolic_path_constraint.append(Not(branch_expression))
+            path_conditions_and_vars["path_condition"].append(Not(branch_expression))
             compare_and_update_stack(0, k, concolic_stack)
             right_branch = vertices[start].get_falls_to()
             return True, right_branch, k+1
@@ -675,7 +677,7 @@ def sym_exec_ins(start, cur, instr,
                  path_conditions_and_vars, var_concrete,
                  analysis):
     global all_linear, all_locs_definite
-    global I_gen
+    global I_gen, I_vars
     # print("""step %d""", instr)
     instr_parts = str.split(instr, ' ')
 
@@ -922,15 +924,21 @@ def sym_exec_ins(start, cur, instr,
     elif instr_parts[0] == "GT":
         if len(stack) > 1:
             first = stack.pop(0)
+            first_concrete = stack_concrete.pop(0)
             second = stack.pop(0)
+            second_concrete = stack_concrete.pop(0)
             if isinstance(first, (int, long)) and isinstance(second, (int, long)):
                 if first > second:
                     stack.insert(0, 1)
+                    stack_concrete.insert(0, 1)
                 else:
                     stack.insert(0, 0)
+                    stack_concrete.insert(0, 0)
             else:
                 sym_expression = If(UGT(first, second), BitVecVal(1, 256), BitVecVal(0, 256))
                 stack.insert(0, sym_expression)
+                sym_expression_concrete = 1 if first_concrete > second_concrete else 0
+                stack_concrete.insert(0, sym_expression_concrete)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "SLT":  # Not fully faithful to signed comparison
@@ -985,14 +993,19 @@ def sym_exec_ins(start, cur, instr,
         # Currently handled by try and catch
         if len(stack) > 0:
             first = stack.pop(0)
+            first_concrete = stack_concrete.pop(0)
             if isinstance(first, (int, long)):
                 if first == 0:
                     stack.insert(0, 1)
+                    stack_concrete.insert(0, 1)
                 else:
                     stack.insert(0, 0)
+                    stack_concrete.insert(0, 0)
             else:
                 sym_expression = If(first == 0, BitVecVal(1, 256), BitVecVal(0, 256))
                 stack.insert(0, sym_expression)
+                sym_expression_concrete = 1 if first_concrete == 0 else 0
+                stack_concrete.insert(0, sym_expression_concrete)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "AND":
@@ -1169,12 +1182,16 @@ def sym_exec_ins(start, cur, instr,
         stack.insert(0, new_var)
     elif instr_parts[0] == "TIMESTAMP":  # information from block header
         new_var_name = "IH_s"
+        # treat as an input
         if new_var_name in path_conditions_and_vars:
             new_var = path_conditions_and_vars[new_var_name]
         else:
             new_var = BitVec(new_var_name, 256)
             path_conditions_and_vars[new_var_name] = new_var
+        if new_var_name not in I_vars:
+            I_vars[new_var_name] = random.randint(0, 2**256 - 1)
         stack.insert(0, new_var)
+        stack_concrete.insert(0, I_vars[new_var_name])
     elif instr_parts[0] == "NUMBER":  # information from block header
         new_var_name = "IH_i"
         if new_var_name in path_conditions_and_vars:
