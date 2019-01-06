@@ -713,13 +713,17 @@ def sym_exec_ins(start, cur, instr,
     elif instr_parts[0] == "MUL":
         if len(stack) > 1:
             first = stack.pop(0)
+            first_concrete = stack_concrete.pop(0)
             second = stack.pop(0)
+            second_concrete = stack_concrete.pop(0)
             if isinstance(first, (int, long)) and not isinstance(second, (int, long)):
                 first = BitVecVal(first, 256)
             elif not isinstance(first, (int, long)) and isinstance(second, (int, long)):
                 second = BitVecVal(second, 256)
             computed = first * second
+            computed_concrete = first_concrete * second_concrete
             stack.insert(0, computed)
+            stack_concrete.insert(0, computed_concrete)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "SUB":
@@ -757,61 +761,86 @@ def sym_exec_ins(start, cur, instr,
     elif instr_parts[0] == "MOD":
         if len(stack) > 1:
             first = stack.pop(0)
+            first_concrete = stack_concrete.pop(0)
             second = stack.pop(0)
+            second_concrete = stack_concrete.pop(0)
+
             if isinstance(second, (int, long)):
                 if second == 0:
                     computed = 0
+                    computed_concrete = 0
                 else:
                     if not isinstance(first, (int, long)):
                         second = BitVecVal(second, 256)  # Make second a bitvector
                     computed = first % second
+                    computed_concrete = first_concrete % second_concrete
             else:
                 solver.push()
                 solver.add(Not(second == 0))
                 if solver.check() == unsat:
                     # it is provable that second is indeed equal to zero
                     computed = 0
+                    computed_concrete = 0
                 else:
                     if isinstance(first, (int, long)):
                         first = BitVecVal(first, 256)  # Make first a bitvector
                     computed = first % second
+                    if second_concrete == 0:
+                        computed_concrete = 0
+                    else:
+                        computed_concrete = first_concrete % second_concrete
                 solver.pop()
             stack.insert(0, computed)
+            stack_concrete.insert(0, computed_concrete)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "SMOD":
         if len(stack) > 1:
             first = stack.pop(0)
+            first_concrete = stack_concrete.pop(0)
             second = stack.pop(0)
+            second_concrete = stack_concrete.pop(0)
             if isinstance(second, (int, long)):
                 if second == 0:
                     computed = 0
+                    computed_concrete = 0
                 else:
                     if not isinstance(first, (int, long)):
                         second = BitVecVal(second, 256)  # Make second a bitvector
                     computed = first % second  # This is not yet faithful
+                    computed_concrete = first_concrete % second_concrete
             else:
                 solver.push()
                 solver.add(Not(second == 0))
                 if solver.check() == unsat:
                     # it is provable that second is indeed equal to zero
                     computed = 0
+                    computed_concrete = 0
                 else:
                     if isinstance(first, (int, long)):
                         first = BitVecVal(first, 256)  # Make first a bitvector
                     computed = first % second  # This is not yet faithful
+                    if second_concrete == 0:
+                        computed_concrete = 0
+                    else:
+                        computed_concrete = first_concrete % second_concrete
                 solver.pop()
             stack.insert(0, computed)
+            stack_concrete.insert(0, computed_concrete)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "ADDMOD":
         if len(stack) > 2:
             first = stack.pop(0)
+            first_concrete = stack_concrete.pop(0)
             second = stack.pop(0)
+            second_concrete = stack_concrete.pop(0)
             third = stack.pop(0)
+            third_concrete = stack_concrete.pop(0)
             if isinstance(third, (int, long)):
                 if third == 0:
                     computed = 0
+                    computed_concrete = 0
                 else:
                     if not (isinstance(first, (int, long)) and isinstance(second, (int, long))):
                         # there is one guy that is a symbolic expression
@@ -821,30 +850,41 @@ def sym_exec_ins(start, cur, instr,
                         if isinstance(second, (int, long)):
                             second = BitVecVal(second, 256)
                     computed = (first + second) % third
+                    computed_concrete = (first_concrete + second_concrete) % third_concrete
             else:
                 solver.push()
                 solver.add(Not(third == 0))
                 if solver.check() == unsat:
                     # it is provable that second is indeed equal to zero
                     computed = 0
+                    computed_concrete = 0
                 else:
                     if isinstance(first, (int, long)):
                         first = BitVecVal(first, 256)
                     if isinstance(second, (int, long)):
                         second = BitVecVal(second, 256)
                     computed = (first + second) % third
+                    if third_concrete == 0:
+                        computed_concrete = 0
+                    else:
+                        computed_concrete = (first_concrete + second_concrete) % third_concrete
                 solver.pop()
             stack.insert(0, computed)
+            stack_concrete.insert(0, computed_concrete)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "MULMOD":
         if len(stack) > 2:
             first = stack.pop(0)
+            first_concrete = stack_concrete.pop(0)
             second = stack.pop(0)
+            second_concrete = stack_concrete.pop(0)
             third = stack.pop(0)
+            third_concrete = stack_concrete.pop(0)
             if isinstance(third, (int, long)):
                 if third == 0:
                     computed = 0
+                    computed_concrete = 0
                 else:
                     if not (isinstance(first, (int, long)) and isinstance(second, (int, long))):
                         # there is one guy that is a symbolic expression
@@ -854,20 +894,20 @@ def sym_exec_ins(start, cur, instr,
                         if isinstance(second, (int, long)):
                             second = BitVecVal(second, 256)
                     computed = (first * second) % third
+                    computed_concrete = (first_concrete * second_concrete) % third_concrete
             else:
-                solver.push()
-                solver.add(Not(third == 0))
-                if solver.check() == unsat:
-                    # it is provable that second is indeed equal to zero
-                    computed = 0
+                if isinstance(first, (int, long)):
+                    first = BitVecVal(first, 256)
+                if isinstance(second, (int, long)):
+                    second = BitVecVal(second, 256)
+                computed = (first * second) % third
+                if third_concrete == 0:
+                    computed_concrete = 0
                 else:
-                    if isinstance(first, (int, long)):
-                        first = BitVecVal(first, 256)
-                    if isinstance(second, (int, long)):
-                        second = BitVecVal(second, 256)
-                    computed = (first * second) % third
+                    computed_concrete = (first_concrete * second_concrete) % third_concrete
                 solver.pop()
             stack.insert(0, computed)
+            stack_concrete.insert(0, computed_concrete)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "EXP":
@@ -884,24 +924,18 @@ def sym_exec_ins(start, cur, instr,
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "SIGNEXTEND":
         if len(stack) > 1:
-            index = stack.pop(0)
-            content = stack.pop(0)
-            new_var_name = gen.gen_arbitrary_var()
-            new_var = BitVec(new_var_name, 256)
-            path_conditions_and_vars[new_var_name] = new_var
-            stack.insert(0, new_var)
-            '''
-            if isinstance(index, (int, long)):
-                t = 256 - 8 * (index + 1)
-                if isinstance(content, (int, long)):
-                    # TODO
-                else:
-                    for i in range(0, 255):
-
-            else:
-                # DON'T KNOW WHAT could be the resulting value
-                # we then create a new symbolic variable
-            '''
+            _ = stack.pop(0)
+            _ = stack.pop(0)
+            index_concrete = stack_concrete.pop(0)
+            content_concrete = stack_concrete.pop(0)
+            msb = 2**(8+8*index_concrete)
+            content_concrete = (2**msb-1) & content_concrete
+            mask = (2**msb) >> 1
+            if mask & instr:
+                content_concrete += (2**256 >> msb) << msb
+            stack.insert(0, content_concrete)
+            stack_concrete.insert(0, content_concrete)
+            all_linear = False
         else:
             raise ValueError('STACK underflow')
     #
@@ -910,15 +944,21 @@ def sym_exec_ins(start, cur, instr,
     elif instr_parts[0] == "LT":
         if len(stack) > 1:
             first = stack.pop(0)
+            first_concrete = stack_concrete.pop(0)
             second = stack.pop(0)
+            second_concrete = stack_concrete.pop(0)
             if isinstance(first, (int, long)) and isinstance(second, (int, long)):
                 if first < second:
                     stack.insert(0, 1)
+                    stack_concrete.insert(0, 1)
                 else:
                     stack.insert(0, 0)
+                    stack_concrete.insert(0, 0)
             else:
                 sym_expression = If(ULT(first, second), BitVecVal(1, 256), BitVecVal(0, 256))
                 stack.insert(0, sym_expression)
+                sym_expression_concrete = 1 if first_concrete < second_concrete else 0
+                stack_concrete.insert(0, sym_expression_concrete)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "GT":
@@ -944,29 +984,41 @@ def sym_exec_ins(start, cur, instr,
     elif instr_parts[0] == "SLT":  # Not fully faithful to signed comparison
         if len(stack) > 1:
             first = stack.pop(0)
+            first_concrete = stack_concrete.pop(0)
             second = stack.pop(0)
+            second_concrete = stack_concrete.pop(0)
             if isinstance(first, (int, long)) and isinstance(second, (int, long)):
                 if first < second:
                     stack.insert(0, 1)
+                    stack_concrete.insert(0, 1)
                 else:
                     stack.insert(0, 0)
+                    stack_concrete.insert(0, 0)
             else:
                 sym_expression = If(first < second, BitVecVal(1, 256), BitVecVal(0, 256))
                 stack.insert(0, sym_expression)
+                sym_expression_concrete = 1 if first_concrete < second_concrete else 0
+                stack_concrete.insert(0, sym_expression_concrete)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "SGT":  # Not fully faithful to signed comparison
         if len(stack) > 1:
             first = stack.pop(0)
+            first_concrete = stack_concrete.pop(0)
             second = stack.pop(0)
+            second_concrete = stack_concrete.pop(0)
             if isinstance(first, (int, long)) and isinstance(second, (int, long)):
                 if first > second:
                     stack.insert(0, 1)
+                    stack_concrete.insert(0, 1)
                 else:
                     stack.insert(0, 0)
+                    stack_concrete.insert(0, 0)
             else:
                 sym_expression = If(first > second, BitVecVal(1, 256), BitVecVal(0, 256))
                 stack.insert(0, sym_expression)
+                sym_expression_concrete = 1 if first_concrete > second_concrete else 0
+                stack_concrete.insert(0, sym_expression_concrete)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "EQ":
@@ -1012,39 +1064,53 @@ def sym_exec_ins(start, cur, instr,
         if len(stack) > 1:
             first = stack.pop(0)
             second = stack.pop(0)
+            first_concrete = stack_concrete.pop(0)
+            second_concrete = stack_concrete.pop(0)
             computed = first & second
+            computed_concrete = first_concrete & second_concrete
             stack.insert(0, computed)
+            stack_concrete.insert(0, computed_concrete)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "OR":
         if len(stack) > 1:
             first = stack.pop(0)
             second = stack.pop(0)
-
+            first_concrete = stack_concrete.pop(0)
+            second_concrete = stack_concrete.pop(0)
             computed = first | second
+            computed_concrete = first_concrete | second_concrete
             stack.insert(0, computed)
-
+            stack_concrete.insert(0, computed_concrete)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "XOR":
         if len(stack) > 1:
             first = stack.pop(0)
             second = stack.pop(0)
-
+            first_concrete = stack_concrete.pop(0)
+            second_concrete = stack_concrete.pop(0)
             computed = first ^ second
+            computed_concrete = first_concrete ^ second_concrete
             stack.insert(0, computed)
-
+            stack_concrete.insert(0, computed_concrete)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "NOT":
         if len(stack) > 0:
             first = stack.pop(0)
+            first_concrete = stack_concrete.pop(0)
             if isinstance(first, (int, long)):
+                #todo: not handle correctly
                 complement = -1 - first
+                computed_concrete = -1 - first_concrete
                 stack.insert(0, complement)
+                stack_concrete.insert(0, computed_concrete)
             else:
                 sym_expression = (~ first)
                 stack.insert(0, sym_expression)
+                computed_concrete = (1 << 256) - 1 - first_concrete
+                stack_concrete.insert(0, computed_concrete)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "BYTE":
@@ -1056,11 +1122,13 @@ def sym_exec_ins(start, cur, instr,
         if len(stack) > 1:
             stack.pop(0)
             stack.pop(0)
+            # todo: deterministic variable but not implement correctly
+            a = stack_concrete.pop(0)
+            b = stack_concrete.pop(0)
+            res = hash(a+b)
             # push into the execution a fresh symbolic variable
-            new_var_name = gen.gen_arbitrary_var()
-            new_var = BitVec(new_var_name, 256)
-            path_conditions_and_vars[new_var_name] = new_var
-            stack.insert(0, new_var)
+            stack.insert(0, res)
+            stack_concrete(0, res)
         else:
             raise ValueError('STACK underflow')
     #
@@ -1073,7 +1141,10 @@ def sym_exec_ins(start, cur, instr,
         else:
             new_var = BitVec(new_var_name, 256)
             path_conditions_and_vars[new_var_name] = new_var
+        if new_var_name not in I_vars:
+            I_vars[new_var_name] = random.randint(0, 2**256-1)
         stack.insert(0, new_var)
+        stack.insert(0, I_vars[new_var_name])
     elif instr_parts[0] == "BALANCE":
         if len(stack) > 0:
             address = stack.pop(0)
@@ -1138,6 +1209,9 @@ def sym_exec_ins(start, cur, instr,
             stack.pop(0)
             stack.pop(0)
             stack.pop(0)
+            stack_concrete.pop(0)
+            stack_concrete.pop(0)
+            stack_concrete.pop(0)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "CODECOPY":  # Copy code running in current env to memory
@@ -1147,6 +1221,9 @@ def sym_exec_ins(start, cur, instr,
             stack.pop(0)
             stack.pop(0)
             stack.pop(0)
+            stack_concrete.pop(0)
+            stack_concrete.pop(0)
+            stack_concrete.pop(0)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "GASPRICE":  # get address of currently executing account
@@ -1222,47 +1299,31 @@ def sym_exec_ins(start, cur, instr,
     elif instr_parts[0] == "POP":
         if len(stack) > 0:
             stack.pop(0)
+            stack_concrete.pop(0)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "MLOAD":
         if len(stack) > 0:
+            # concolic execution omit the case storing to a symbolic address
             address = stack.pop(0)
+            if not isinstance(address, (int, long)):
+                all_locs_definite = False
+            address_concrete = stack_concrete.pop(0)
             current_miu_i = global_state["miu_i"]
-            if isinstance(address, (int, long)) and address in mem:
-                temp = long(ceil((address + 32) / float(32)))
+            if address_concrete in mem:
+                temp = long(ceil((address_concrete + 32) / float(32)))
                 if temp > current_miu_i:
                     current_miu_i = temp
-                value = mem[address]
+                value = mem[address_concrete]
+                value_concrete = mem_concrete[address_concrete]
                 stack.insert(0, value)
+                stack_concrete.insert(0, value_concrete)
                 if PRINT_MODE: print "temp: " + str(temp)
                 if PRINT_MODE: print "current_miu_i: " + str(current_miu_i)
             else:
-                temp = ((address + 31) / 32) + 1
-                if isinstance(current_miu_i, (int, long)):
-                    current_miu_i = BitVecVal(current_miu_i, 256)
-                expression = current_miu_i < temp
-                solver.push()
-                solver.add(expression)
-                if solver.check() != unsat:
-                    # this means that it is possibly that current_miu_i < temp
-                    if expression == True:
-                        current_miu_i = temp
-                    else:
-                        current_miu_i = If(expression, temp, current_miu_i)
-                solver.pop()
-                new_var_name = gen.gen_mem_var(address)
-                if new_var_name in path_conditions_and_vars:
-                    new_var = path_conditions_and_vars[new_var_name]
-                else:
-                    new_var = BitVec(new_var_name, 256)
-                    path_conditions_and_vars[new_var_name] = new_var
-                stack.insert(0, new_var)
-                if isinstance(address, (int, long)):
-                    mem[address] = new_var
-                else:
-                    mem[str(address)] = new_var
-                if PRINT_MODE: print "temp: " + str(temp)
-                if PRINT_MODE: print "current_miu_i: " + str(current_miu_i)
+                # give a 0 to not store address
+                stack.insert(0, 0)
+                stack_concrete.insert(0, 0)
             global_state["miu_i"] = current_miu_i
         else:
             raise ValueError('STACK underflow')
@@ -1289,30 +1350,21 @@ def sym_exec_ins(start, cur, instr,
     elif instr_parts[0] == "MSTORE8":
         if len(stack) > 1:
             stored_address = stack.pop(0)
+            if not isinstance(stored_address, (int, long)):
+                all_locs_definite = False
             temp_value = stack.pop(0)
             stored_value = temp_value % 256  # get the least byte
+            stored_address_concrete = stack_concrete.pop(0)
+            temp_value_concrete = stack_concrete.pop(0)
+            stored_value_concrete = temp_value_concrete % 256
             current_miu_i = global_state["miu_i"]
-            if isinstance(stored_address, (int, long)):
-                temp = long(ceil((stored_address + 1) / float(32)))
-                if temp > current_miu_i:
-                    current_miu_i = temp
-                mem[stored_address] = stored_value  # note that the stored_value could be symbolic
-            else:
-                temp = (stored_address / 32) + 1
-                if isinstance(current_miu_i, (int, long)):
-                    current_miu_i = BitVecVal(current_miu_i, 256)
-                expression = current_miu_i < temp
-                solver.push()
-                solver.add(expression)
-                if solver.check() != unsat:
-                    # this means that it is possibly that current_miu_i < temp
-                    if expression == True:
-                        current_miu_i = temp
-                    else:
-                        current_miu_i = If(expression, temp, current_miu_i)
-                solver.pop()
-                mem.clear()  # very conservative
-                mem[str(stored_address)] = stored_value
+            temp = long(ceil((stored_address_concrete + 32) / float(32)))
+            if temp > current_miu_i:
+                current_miu_i = temp
+            mem[stored_address_concrete] = stored_value  # note that the stored_value could be symbolic
+            mem_concrete[stored_address_concrete] = stored_value_concrete  # note that the stored_value could be symbolic
+            if PRINT_MODE: print "temp: " + str(temp)
+            if PRINT_MODE: print "current_miu_i: " + str(current_miu_i)
             global_state["miu_i"] = current_miu_i
         else:
             raise ValueError('STACK underflow')
@@ -1379,6 +1431,7 @@ def sym_exec_ins(start, cur, instr,
     elif instr_parts[0] == "MSIZE":
         msize = 32 * global_state["miu_i"]
         stack.insert(0, msize)
+        stack_concrete.insert(0, msize)
     elif instr_parts[0] == "GAS":
         # In general, we do not have this precisely. It depends on both
         # the initial gas and the amount has been depleted
@@ -1430,6 +1483,7 @@ def sym_exec_ins(start, cur, instr,
         num_of_pops = 2 + int(instr_parts[0][3:])
         while num_of_pops > 0:
             stack.pop(0)
+            stack_concrete.pop(0)
             num_of_pops -= 1
 
     #
