@@ -1240,23 +1240,32 @@ def sym_exec_ins(start, cur, instr,
     elif instr_parts[0] == "BLOCKHASH":  # information from block header
         if len(stack) > 0:
             stack.pop(0)
+            stack_concrete.pop(0)
             new_var_name = "IH_blockhash"
+            # treat as an input
             if new_var_name in path_conditions_and_vars:
                 new_var = path_conditions_and_vars[new_var_name]
             else:
                 new_var = BitVec(new_var_name, 256)
                 path_conditions_and_vars[new_var_name] = new_var
+            if new_var_name not in I_vars:
+                I_vars[new_var_name] = random.randint(0, 2**256 - 1)
             stack.insert(0, new_var)
+            stack_concrete.insert(0, I_vars[new_var_name])
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "COINBASE":  # information from block header
         new_var_name = "IH_c"
+        # treat as an input
         if new_var_name in path_conditions_and_vars:
             new_var = path_conditions_and_vars[new_var_name]
         else:
             new_var = BitVec(new_var_name, 256)
             path_conditions_and_vars[new_var_name] = new_var
+        if new_var_name not in I_vars:
+            I_vars[new_var_name] = random.randint(0, 2**256 - 1)
         stack.insert(0, new_var)
+        stack_concrete.insert(0, I_vars[new_var_name])
     elif instr_parts[0] == "TIMESTAMP":  # information from block header
         new_var_name = "IH_s"
         # treat as an input
@@ -1271,28 +1280,40 @@ def sym_exec_ins(start, cur, instr,
         stack_concrete.insert(0, I_vars[new_var_name])
     elif instr_parts[0] == "NUMBER":  # information from block header
         new_var_name = "IH_i"
+        # treat as an input
         if new_var_name in path_conditions_and_vars:
             new_var = path_conditions_and_vars[new_var_name]
         else:
             new_var = BitVec(new_var_name, 256)
             path_conditions_and_vars[new_var_name] = new_var
+        if new_var_name not in I_vars:
+            I_vars[new_var_name] = random.randint(0, 2**256 - 1)
         stack.insert(0, new_var)
+        stack_concrete.insert(0, I_vars[new_var_name])
     elif instr_parts[0] == "DIFFICULTY":  # information from block header
         new_var_name = "IH_d"
+        # treat as an input
         if new_var_name in path_conditions_and_vars:
             new_var = path_conditions_and_vars[new_var_name]
         else:
             new_var = BitVec(new_var_name, 256)
             path_conditions_and_vars[new_var_name] = new_var
+        if new_var_name not in I_vars:
+            I_vars[new_var_name] = random.randint(0, 2**256 - 1)
         stack.insert(0, new_var)
+        stack_concrete.insert(0, I_vars[new_var_name])
     elif instr_parts[0] == "GASLIMIT":  # information from block header
         new_var_name = "IH_l"
+        # treat as an input
         if new_var_name in path_conditions_and_vars:
             new_var = path_conditions_and_vars[new_var_name]
         else:
             new_var = BitVec(new_var_name, 256)
             path_conditions_and_vars[new_var_name] = new_var
+        if new_var_name not in I_vars:
+            I_vars[new_var_name] = random.randint(0, 2**256 - 1)
         stack.insert(0, new_var)
+        stack_concrete.insert(0, I_vars[new_var_name])
     #
     #  50s: Stack, Memory, Storage, and Flow Information
     #
