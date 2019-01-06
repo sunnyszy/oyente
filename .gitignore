@@ -4,6 +4,7 @@ tmp.py
 *.pyc
 contract_data
 *.sol
+!test/*.sol
 *.json
 *.disasm
 *.report

@@ -407,6 +407,7 @@ def add_falls_to():
 
 def get_init_global_state(path_conditions_and_vars, vars_concrete):
     global I_vars, I_balance
+    global I_constraint
     global_state = {"balance": {}}
     global_state_concrete = {"balance": {}}
 
@@ -421,6 +422,7 @@ def get_init_global_state(path_conditions_and_vars, vars_concrete):
 
     deposited_value = BitVec("Iv", 256)
     path_conditions_and_vars["Iv"] = deposited_value
+    I_constraint.append(deposited_value <= 1e20)
     if "Iv" not in I_vars:
         # rough estimate upper bound.
         # See https://ethereum.stackexchange.com/questions/16825/is-there-a-max-amount-of-gas-per-transaction
@@ -472,9 +474,6 @@ def full_concolic_exec():
     I_gen = {}  # init for calldataload
     I_balance = {}  # init for global balance
 
-    # todo: implement var_constraint to prevent false positive
-    global I_constraint
-    I_constraint = []
 
     directed = 1
     while directed:
@@ -487,6 +486,7 @@ def full_concolic_exec():
 
 def solve_path_constraint(k, concolic_path_constraint, concolic_stack, path_conditions_and_vars):
     global I_vars, I_gen, I_balance
+    global I_constraint
     j = k - 1
     while concolic_stack[j][1] and j >= 0:
         j -= 1
@@ -498,6 +498,8 @@ def solve_path_constraint(k, concolic_path_constraint, concolic_stack, path_cond
         solver.push()
         for i in range(j+1):
             solver.add(concolic_path_constraint[i])
+        for c in I_constraint:
+            solver.add(c)
         if solver.check() == sat:
             m = solver.model()
             for d in m.decls():
@@ -546,6 +548,9 @@ def instrumented_program(concolic_stack):
 
     path_conditions_and_vars = {"path_condition": []}
     vars_concrete = {}
+
+    global I_constraint
+    I_constraint = []
 
     # this is init global state for this particular execution
     global_state, global_state_concrete = get_init_global_state(path_conditions_and_vars, vars_concrete)
@@ -690,15 +695,17 @@ def sym_exec_ins(start, cur, instr,
     elif instr_parts[0] == "ADD":
         if len(stack) > 1:
             first = stack.pop(0)
+            first_concrete = stack_concrete.pop(0)
             second = stack.pop(0)
-            # Type conversion is needed when they are mismatched
+            second_concrete = stack_concrete.pop(0)
             if isinstance(first, (int, long)) and not isinstance(second, (int, long)):
                 first = BitVecVal(first, 256)
             elif not isinstance(first, (int, long)) and isinstance(second, (int, long)):
                 second = BitVecVal(second, 256)
-            # todo: for concolic value, convert to BitVecVal -> add -> simplify -> convert back to int
             computed = first + second
+            computed_concrete = first_concrete + second_concrete
             stack.insert(0, computed)
+            stack_concrete.insert(0, computed_concrete)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "MUL":
@@ -1089,9 +1096,9 @@ def sym_exec_ins(start, cur, instr,
             path_conditions_and_vars[new_var_name] = new_var
         stack.insert(0, new_var)
     elif instr_parts[0] == "CALLVALUE":  # get value of this transaction
-        new_var_name = "Iv"
-        stack.insert(0, path_conditions_and_vars[new_var_name])
-        stack_concrete.insert(0, var_concrete[new_var_name])
+        var_name = "Iv"
+        stack.insert(0, path_conditions_and_vars[var_name])
+        stack_concrete.insert(0, var_concrete[var_name])
     elif instr_parts[0] == "CALLDATALOAD":  # from input data from environment
         if len(stack) > 0:
             # position is always a constant
@@ -1393,9 +1400,8 @@ def sym_exec_ins(start, cur, instr,
     elif instr_parts[0].startswith("SWAP", 0):
         position = int(instr_parts[0][4:], 10)
         if len(stack) > position:
-            temp = stack[position]
-            stack[position] = stack[0]
-            stack[0] = temp
+            stack[position], stack[0] = stack[0], stack[position]
+            stack_concrete[position], stack_concrete[0] = stack_concrete[0], stack_concrete[position]
         else:
             raise ValueError('STACK underflow')
 
@@ -1514,6 +1520,8 @@ def sym_exec_ins(start, cur, instr,
         if len(stack) > 1:
             stack.pop(0)
             stack.pop(0)
+            stack_concrete.pop(0)
+            stack_concrete.pop(0)
             # TODO
             pass
         else:
