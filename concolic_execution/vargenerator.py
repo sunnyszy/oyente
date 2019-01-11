@@ -28,6 +28,10 @@ class Generator:
         self.count += 1
         return "gas_" + str(self.count)
 
+    def gen_gas_var_concrete(self):
+        self.count += 1
+        return self.count
+
     def gen_gas_price_var(self):
         return "Ip"
 

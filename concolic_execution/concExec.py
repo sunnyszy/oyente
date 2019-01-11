@@ -408,7 +408,7 @@ def add_falls_to():
 def get_init_global_state(path_conditions_and_vars):
     global I_vars, I_balance
     global I_constraint
-    global_state = {"balance": {}}
+    global_state = {"balance": {}}  # address is concrete
     global_state_concrete = {"balance": {}}
 
     # the address
@@ -440,15 +440,17 @@ def get_init_global_state(path_conditions_and_vars):
 
     # update the balances of the "caller" and "callee"
 
-    global_state["balance"]["Is"] = (init_is - deposited_value)
-    if I_vars["Is"] not in I_balance:
-        I_balance[I_vars["Is"]] = random.randint(0, 2 ** 256 - 1 - I_vars["Iv"])
-    global_state_concrete["balance"]["Is"] = I_balance[I_vars["Is"]]
+    new_var_name = 'balance_' + str(I_vars["Is"])
+    global_state["balance"][new_var_name] = (init_is - deposited_value)
+    if new_var_name not in I_balance:
+        I_balance[new_var_name] = random.randint(0, 2 ** 256 - 1 - I_vars["Iv"])
+    global_state_concrete["balance"][new_var_name] = I_balance[I_vars["Is"]]
 
-    global_state["balance"]["Ia"] = (init_ia + deposited_value)
-    if I_vars["Ia"] not in I_balance:
-        I_balance[I_vars["Ia"]] = random.randint(I_vars["Iv"], 2 ** 256 - 1)
-    global_state_concrete["balance"]["Ia"] = I_balance[I_vars["Ia"]]
+    new_var_name = 'balance_' + str(I_vars["Ia"])
+    global_state["balance"][new_var_name] = (init_ia + deposited_value)
+    if new_var_name not in I_balance:
+        I_balance[new_var_name] = random.randint(I_vars["Iv"], 2 ** 256 - 1)
+    global_state_concrete["balance"][new_var_name] = I_balance[I_vars["Ia"]]
 
     # the state of the current current contract
     global_state["Ia"] = {}
@@ -467,10 +469,11 @@ def full_concolic_exec():
 
     # init concrete trace stack
     concolic_stack = []
-    global I_vars, I_gen, I_balance
+    global I_vars, I_gen, I_balance, I_store
     I_vars = {}  # init for specific var, e.g., Is
     I_gen = {}  # init for calldataload
     I_balance = {}  # init for global balance
+    I_store = {}
 
     directed = 1
     while directed:
@@ -482,7 +485,7 @@ def full_concolic_exec():
 
 
 def solve_path_constraint(k, concolic_path_constraint, concolic_stack, path_conditions_and_vars):
-    global I_vars, I_gen, I_balance
+    global I_vars, I_gen, I_balance, I_store
     global I_constraint
     j = k - 1
     while concolic_stack[j][1] and j >= 0:
@@ -507,6 +510,8 @@ def solve_path_constraint(k, concolic_path_constraint, concolic_stack, path_cond
                     match_d = I_gen
                 elif name in I_balance:
                     match_d = I_balance
+                elif name in I_store:
+                    match_d = I_store
                 else:
                     raise KeyError('Got a variable not in I')
                 match_d[name] = m[d].as_long()
@@ -546,7 +551,7 @@ def instrumented_program(concolic_stack):
     path_conditions_and_vars = {"path_condition": []}
 
     global I_constraint
-    I_constraint = []
+    I_constraint = []  # I_constraint delays init until the actual variable is created
 
     # this is init global state for this particular execution
     global_state, global_state_concrete = get_init_global_state(path_conditions_and_vars)
@@ -673,7 +678,7 @@ def sym_exec_ins(start, cur, instr,
                  path_conditions_and_vars,
                  analysis):
     global all_linear, all_locs_definite
-    global I_gen, I_vars, I_balance
+    global I_gen, I_vars, I_balance, I_constraint, I_store
     # print("""step %d""", instr)
     instr_parts = str.split(instr, ' ')
 
@@ -1131,94 +1136,72 @@ def sym_exec_ins(start, cur, instr,
     # 30s: Environment Information
     #
     elif instr_parts[0] == "ADDRESS":  # get address of currently executing account
-        new_var_name = gen.gen_address_var()
-        if new_var_name in path_conditions_and_vars:
-            new_var = path_conditions_and_vars[new_var_name]
-        else:
-            new_var = BitVec(new_var_name, 256)
-            path_conditions_and_vars[new_var_name] = new_var
-        if new_var_name not in I_vars:
-            I_vars[new_var_name] = random.randint(0, 2**256-1)
-        stack.insert(0, new_var)
-        stack.insert(0, I_vars[new_var_name])
+        new_var_name = "Ia"
+        stack.insert(0, path_conditions_and_vars[new_var_name])
+        stack_concrete.insert(0, I_vars[new_var_name])
     elif instr_parts[0] == "BALANCE":
         if len(stack) > 0:
             # position is always a constant
-            stack.pop(0)
-            position = stack_concrete.pop()
-            key = 'balance_'+str(position)
-            if key in global_state:
-                stack.insert(0, global_state[key])
-                stack_concrete.insert(0, global_state_concrete[key])
+            position = stack.pop(0)
+            if not isinstance(position, (int, long)):
+                all_locs_definite = False
+            position_concrete = stack_concrete.pop()
+
+            new_var_name = 'balance_'+str(position_concrete)
+            if new_var_name in global_state["balance"]:
+                stack.insert(0, global_state["balance"][new_var_name])
+                stack_concrete.insert(0, global_state_concrete["balance"][new_var_name])
             else:
-                I_gen[key] = random.randint(0, 2**256 - 1)
-                new_var = BitVec(key, 256)
-                stack.insert(0, new_var)
-                stack_concrete.insert(0, I_gen[key])
-                #todo: global state, global state concrete
-
-            # if not, init the variable
-            # todo: assign concrete to concrete global state
-
-
-
-            new_var_name = gen.gen_balance_var()
-            if new_var_name in path_conditions_and_vars:
-                new_var = path_conditions_and_vars[new_var_name]
-            else:
-                new_var = BitVec(new_var_name, 256)
-                path_conditions_and_vars[new_var_name] = new_var
-            if isinstance(address, (int, long)):
-                hashed_address = "concrete_address_" + str(address)
-            else:
-                hashed_address = str(address)
-            global_state["balance"][hashed_address] = new_var
-            stack.insert(0, new_var)
+                if new_var_name not in I_balance:
+                    I_balance[new_var_name] = random.randint(0, 2**256 - 1)
+                if new_var_name not in path_conditions_and_vars:
+                    path_conditions_and_vars[new_var_name] = BitVec(new_var_name, 256)
+                global_state["balance"][new_var_name] = path_conditions_and_vars[new_var_name]
+                global_state_concrete["balance"][new_var_name] = I_balance[new_var_name]
+                stack.insert(0, global_state["balance"][new_var_name])
+                stack_concrete.insert(0, global_state_concrete["balance"][new_var_name])
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "CALLER":  # get caller address
         # that is directly responsible for this execution
-        new_var_name = gen.gen_caller_var()
-        if new_var_name in path_conditions_and_vars:
-            new_var = path_conditions_and_vars[new_var_name]
-        else:
-            new_var = BitVec(new_var_name, 256)
-            path_conditions_and_vars[new_var_name] = new_var
-        stack.insert(0, new_var)
+        new_var_name = "Is"
+        stack.insert(0, path_conditions_and_vars[new_var_name])
+        stack_concrete.insert(0, I_vars[new_var_name])
     elif instr_parts[0] == "ORIGIN":  # get execution origination address
-        new_var_name = gen.gen_origin_var()
-        if new_var_name in path_conditions_and_vars:
-            new_var = path_conditions_and_vars[new_var_name]
-        else:
-            new_var = BitVec(new_var_name, 256)
-            path_conditions_and_vars[new_var_name] = new_var
-        stack.insert(0, new_var)
+        new_var_name = "Io"
+        if new_var_name not in I_vars:
+            I_vars[new_var_name] = random.randint(0, 2**256 - 1)
+        if new_var_name not in path_conditions_and_vars:
+            path_conditions_and_vars[new_var_name] = BitVec(new_var_name, 256)
+        stack.insert(0, path_conditions_and_vars[new_var_name])
+        stack_concrete.insert(0, I_vars[new_var_name])
     elif instr_parts[0] == "CALLVALUE":  # get value of this transaction
         var_name = "Iv"
         stack.insert(0, path_conditions_and_vars[var_name])
-        stack_concrete.insert(0, var_concrete[var_name])
+        stack_concrete.insert(0, I_vars[var_name])
     elif instr_parts[0] == "CALLDATALOAD":  # from input data from environment
         if len(stack) > 0:
             # position is always a constant
             stack.pop(0)
             position = stack_concrete.pop(0)
-            key = 'Id_'+str(position)
-            if key not in I_gen:
-                I_gen[key] = random.randint(0, 2 ** 256 - 1)  # max 1024
-                path_conditions_and_vars[key] = BitVec(key, 256)
-            # todo: if call multiple times with same position, should return same variable
-            stack.insert(0, path_conditions_and_vars[key])
-            stack_concrete.insert(0, I_gen[key])
+            new_var_name = 'Id_'+str(position)
+            if new_var_name not in I_gen:
+                I_gen[new_var_name] = random.randint(0, 2 ** 256 - 1)  # max 1024
+            if new_var_name not in path_conditions_and_vars:
+                path_conditions_and_vars[new_var_name] = BitVec(new_var_name, 256)
+            stack.insert(0, path_conditions_and_vars[new_var_name])
+            stack_concrete.insert(0, I_gen[new_var_name])
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "CALLDATASIZE":  # from input data from environment
-        new_var_name = gen.gen_data_size()
-        if new_var_name in path_conditions_and_vars:
-            new_var = path_conditions_and_vars[new_var_name]
-        else:
-            new_var = BitVec(new_var_name, 256)
-            path_conditions_and_vars[new_var_name] = new_var
-        stack.insert(0, new_var)
+        new_var_name = "Id_size"
+        if new_var_name not in I_vars:
+            I_vars[new_var_name] = random.randint(0, 1024)
+        if new_var_name not in path_conditions_and_vars:
+            path_conditions_and_vars[new_var_name] = BitVec(new_var_name, 256)
+            I_constraint.append(path_conditions_and_vars[new_var_name] < BitVecVal(1024, 256))  # assume < 1024
+        stack.insert(0, path_conditions_and_vars[new_var_name])
+        stack_concrete.insert(0, I_vars[new_var_name])
     elif instr_parts[0] == "CALLDATACOPY":  # Copy input data to memory
         # Don't know how to simulate this yet
         if len(stack) > 2:
@@ -1243,13 +1226,13 @@ def sym_exec_ins(start, cur, instr,
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "GASPRICE":  # get address of currently executing account
-        new_var_name = gen.gen_gas_price_var()
-        if new_var_name in path_conditions_and_vars:
-            new_var = path_conditions_and_vars[new_var_name]
-        else:
-            new_var = BitVec(new_var_name, 256)
-            path_conditions_and_vars[new_var_name] = new_var
-        stack.insert(0, new_var)
+        new_var_name = "Ip"
+        if new_var_name not in I_vars:
+            I_vars[new_var_name] = random.randint(0, 2**256-1)
+        if new_var_name not in path_conditions_and_vars:
+            path_conditions_and_vars[new_var_name] = BitVec(new_var_name, 256)
+        stack.insert(0, path_conditions_and_vars[new_var_name])
+        stack_concrete.insert(0, I_vars[new_var_name])
     #
     #  40s: Block Information
     #
@@ -1259,76 +1242,58 @@ def sym_exec_ins(start, cur, instr,
             stack_concrete.pop(0)
             new_var_name = "IH_blockhash"
             # treat as an input
-            if new_var_name in path_conditions_and_vars:
-                new_var = path_conditions_and_vars[new_var_name]
-            else:
-                new_var = BitVec(new_var_name, 256)
-                path_conditions_and_vars[new_var_name] = new_var
             if new_var_name not in I_vars:
                 I_vars[new_var_name] = random.randint(0, 2**256 - 1)
-            stack.insert(0, new_var)
+            if new_var_name not in path_conditions_and_vars:
+                path_conditions_and_vars[new_var_name] = BitVec(new_var_name, 256)
+            stack.insert(0, path_conditions_and_vars[new_var_name])
             stack_concrete.insert(0, I_vars[new_var_name])
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "COINBASE":  # information from block header
         new_var_name = "IH_c"
         # treat as an input
-        if new_var_name in path_conditions_and_vars:
-            new_var = path_conditions_and_vars[new_var_name]
-        else:
-            new_var = BitVec(new_var_name, 256)
-            path_conditions_and_vars[new_var_name] = new_var
         if new_var_name not in I_vars:
-            I_vars[new_var_name] = random.randint(0, 2**256 - 1)
-        stack.insert(0, new_var)
+            I_vars[new_var_name] = random.randint(0, 2**256-1)
+        if new_var_name not in path_conditions_and_vars:
+            path_conditions_and_vars[new_var_name] = BitVec(new_var_name, 256)
+        stack.insert(0, path_conditions_and_vars[new_var_name])
         stack_concrete.insert(0, I_vars[new_var_name])
     elif instr_parts[0] == "TIMESTAMP":  # information from block header
         new_var_name = "IH_s"
         # treat as an input
-        if new_var_name in path_conditions_and_vars:
-            new_var = path_conditions_and_vars[new_var_name]
-        else:
-            new_var = BitVec(new_var_name, 256)
-            path_conditions_and_vars[new_var_name] = new_var
         if new_var_name not in I_vars:
-            I_vars[new_var_name] = random.randint(0, 2**256 - 1)
-        stack.insert(0, new_var)
+            I_vars[new_var_name] = random.randint(0, 2**256-1)
+        if new_var_name not in path_conditions_and_vars:
+            path_conditions_and_vars[new_var_name] = BitVec(new_var_name, 256)
+        stack.insert(0, path_conditions_and_vars[new_var_name])
         stack_concrete.insert(0, I_vars[new_var_name])
     elif instr_parts[0] == "NUMBER":  # information from block header
         new_var_name = "IH_i"
         # treat as an input
-        if new_var_name in path_conditions_and_vars:
-            new_var = path_conditions_and_vars[new_var_name]
-        else:
-            new_var = BitVec(new_var_name, 256)
-            path_conditions_and_vars[new_var_name] = new_var
         if new_var_name not in I_vars:
-            I_vars[new_var_name] = random.randint(0, 2**256 - 1)
-        stack.insert(0, new_var)
+            I_vars[new_var_name] = random.randint(0, 2**256-1)
+        if new_var_name not in path_conditions_and_vars:
+            path_conditions_and_vars[new_var_name] = BitVec(new_var_name, 256)
+        stack.insert(0, path_conditions_and_vars[new_var_name])
         stack_concrete.insert(0, I_vars[new_var_name])
     elif instr_parts[0] == "DIFFICULTY":  # information from block header
         new_var_name = "IH_d"
         # treat as an input
-        if new_var_name in path_conditions_and_vars:
-            new_var = path_conditions_and_vars[new_var_name]
-        else:
-            new_var = BitVec(new_var_name, 256)
-            path_conditions_and_vars[new_var_name] = new_var
         if new_var_name not in I_vars:
-            I_vars[new_var_name] = random.randint(0, 2**256 - 1)
-        stack.insert(0, new_var)
+            I_vars[new_var_name] = random.randint(0, 2**256-1)
+        if new_var_name not in path_conditions_and_vars:
+            path_conditions_and_vars[new_var_name] = BitVec(new_var_name, 256)
+        stack.insert(0, path_conditions_and_vars[new_var_name])
         stack_concrete.insert(0, I_vars[new_var_name])
     elif instr_parts[0] == "GASLIMIT":  # information from block header
         new_var_name = "IH_l"
         # treat as an input
-        if new_var_name in path_conditions_and_vars:
-            new_var = path_conditions_and_vars[new_var_name]
-        else:
-            new_var = BitVec(new_var_name, 256)
-            path_conditions_and_vars[new_var_name] = new_var
         if new_var_name not in I_vars:
-            I_vars[new_var_name] = random.randint(0, 2**256 - 1)
-        stack.insert(0, new_var)
+            I_vars[new_var_name] = random.randint(0, 2**256-1)
+        if new_var_name not in path_conditions_and_vars:
+            path_conditions_and_vars[new_var_name] = BitVec(new_var_name, 256)
+        stack.insert(0, path_conditions_and_vars[new_var_name])
         stack_concrete.insert(0, I_vars[new_var_name])
     #
     #  50s: Stack, Memory, Storage, and Flow Information
@@ -1407,39 +1372,46 @@ def sym_exec_ins(start, cur, instr,
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "SLOAD":
         if len(stack) > 0:
+            # concolic execution omit the case storing to a symbolic address
             address = stack.pop(0)
-            if isinstance(address, (int, long)) and address in global_state["Ia"]:
-                value = global_state["Ia"][address]
-                stack.insert(0, value)
+            if not isinstance(address, (int, long)):
+                all_locs_definite = False
+            address_concrete = stack_concrete.pop(0)
+
+            new_var_name = "Ia_store_"+str(address_concrete)
+            if new_var_name in global_state["Ia"]:
+                stack.insert(0, global_state["Ia"][new_var_name])
+                stack_concrete.insert(0, global_state_concrete["Ia"][new_var_name])
             else:
-                new_var_name = gen.gen_owner_store_var(address)
-                if new_var_name in path_conditions_and_vars:
-                    new_var = path_conditions_and_vars[new_var_name]
-                else:
-                    new_var = BitVec(new_var_name, 256)
-                    path_conditions_and_vars[new_var_name] = new_var
-                stack.insert(0, new_var)
-                if isinstance(address, (int, long)):
-                    global_state["Ia"][address] = new_var
-                else:
-                    global_state["Ia"][str(address)] = new_var
+                if new_var_name not in I_store:
+                    I_store[new_var_name] = random.randint(0, 2 ** 256 - 1)  # max 1024
+                if new_var_name not in path_conditions_and_vars:
+                    path_conditions_and_vars[new_var_name] = BitVec(new_var_name, 256)
+                global_state["Ia"][new_var_name] = path_conditions_and_vars[new_var_name]
+                global_state_concrete["Ia"][new_var_name] = I_store[new_var_name]
+                stack.insert(0, global_state["Ia"][new_var_name])
+                stack_concrete.insert(0, global_state_concrete["Ia"][new_var_name])
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "SSTORE":
         if len(stack) > 1:
+            # concolic execution omit the case storing to a symbolic address
             stored_address = stack.pop(0)
+            if not isinstance(stored_address, (int, long)):
+                all_locs_definite = False
             stored_value = stack.pop(0)
-            if isinstance(stored_address, (int, long)):
-                global_state["Ia"][stored_address] = stored_value  # note that the stored_value could be unknown
-            else:
-                global_state["Ia"].clear()  # very conservative
-                global_state["Ia"][str(stored_address)] = stored_value  # note that the stored_value could be unknown
+            stored_address_concrete = stack_concrete.pop(0)
+            stored_value_concrete = stack_concrete.pop(0)
+            global_state["Ia"][stored_address_concrete] = stored_value  # note that the stored_value could be unknown
+            global_state_concrete["Ia"][stored_address_concrete] = stored_value_concrete
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "JUMP":
         if len(stack) > 0:
             # address must be real
-            stack.pop(0)
+            target_address = stack.pop(0)
+            if not isinstance(target_address, (int, long)):
+                all_locs_definite = False
             target_address_concrete = stack_concrete.pop(0)
             vertices[start].set_jump_target(target_address_concrete)
             if target_address_concrete not in edges[start]:
@@ -1474,10 +1446,10 @@ def sym_exec_ins(start, cur, instr,
         # the initial gas and the amount has been depleted
         # we need o think about this in the future, in case precise gas
         # can be tracked
-        new_var_name = gen.gen_gas_var()
-        new_var = BitVec(new_var_name, 256)
-        path_conditions_and_vars[new_var_name] = new_var
-        stack.insert(0, new_var)
+        # concolic execution: use counter
+        n = gen.gen_gas_var_concrete()
+        stack.insert(0, n)
+        stack_concrete.insert(0, n)
     elif instr_parts[0] == "JUMPDEST":
         # Literally do nothing
         pass
@@ -1536,55 +1508,68 @@ def sym_exec_ins(start, cur, instr,
             size_data_input = stack.pop(0)
             start_data_output = stack.pop(0)
             size_data_ouput = stack.pop(0)
+
+            outgas_concrete = stack_concrete.pop(0)
+            recipient_concrete = stack_concrete.pop(0)
+            transfer_amount_concrete = stack_concrete.pop(0)
+            start_data_input_concrete = stack_concrete.pop(0)
+            size_data_input_concrete = stack_concrete.pop(0)
+            start_data_output_concrete = stack_concrete.pop(0)
+            size_data_ouput_concrete = stack_concrete.pop(0)
             # in the paper, it is shaky when the size of data output is
             # min of stack[6] and the | o |
 
-            if isinstance(transfer_amount, (int, long)):
-                if transfer_amount == 0:
-                    stack.insert(0, 1)  # x = 0
-                    return
+            if not isinstance(transfer_amount, (int, long)):
+                all_linear = False
+
+            if transfer_amount_concrete == 0:
+                stack.insert(0, 1)  # x = 0
+                stack_concrete.insert(0, 1)  # x = 0
+                return
 
             # Let us ignore the call depth
-            balance_ia = global_state["balance"]["Ia"]
-            is_enough_fund = (balance_ia < transfer_amount)
-            solver.push()
-            solver.add(is_enough_fund)
-
-            if solver.check() == unsat:
+            balance_ia = global_state["balance"]['balance_'+str(I_vars["Ia"])]
+            if not isinstance(balance_ia, (int, long)):
+                all_linear = False
+            balance_ia_concrete = global_state_concrete["balance"]['balance_'+str(I_vars["Ia"])]
+            is_enough_fund = (balance_ia < transfer_amount)  # todo: reverse error?
+            is_enough_fund_concrete = (balance_ia_concrete < transfer_amount_concrete)
+            if not is_enough_fund_concrete:
                 # this means not enough fund, thus the execution will result in exception
-                solver.pop()
                 stack.insert(0, 0)  # x = 0
+                stack_concrete.insert(0, 0)  # x = 0
             else:
+                # todo:
                 # the execution is possibly okay
                 stack.insert(0, 1)  # x = 1
-                solver.pop()
-                solver.add(is_enough_fund)
+                stack_concrete.insert(0, 1)  # x = 1
+
                 path_conditions_and_vars["path_condition"].append(is_enough_fund)
                 new_balance_ia = (balance_ia - transfer_amount)
-                global_state["balance"]["Ia"] = new_balance_ia
+                new_balance_ia_concrete = (balance_ia_concrete - transfer_amount_concrete)
+                global_state["balance"]['balance_'+str(I_vars["Ia"])] = new_balance_ia
+                global_state_concrete["balance"]['balance_'+str(I_vars["Ia"])] = new_balance_ia_concrete
                 address_is = path_conditions_and_vars["Is"]
                 address_is = (address_is & CONSTANT_ONES_159)
+                address_is_concrete = I_vars["Is"]
+                address_is_concrete = (address_is_concrete & CONSTANT_ONES_159)
+
                 boolean_expression = (recipient != address_is)
-                solver.push()
-                solver.add(boolean_expression)
-                if solver.check() == unsat:
-                    solver.pop()
-                    new_balance_is = (global_state["balance"]["Is"] + transfer_amount)
-                    global_state["balance"]["Is"] = new_balance_is
+                boolean_expression_concrete = (recipient_concrete != address_is_concrete)
+                if not boolean_expression_concrete:
+                    new_balance_is = (global_state["balance"]['balance_'+str(I_vars["Is"])] + transfer_amount)
+                    new_balance_is_concrete = (global_state_concrete["balance"]['balance_'+str(I_vars["Is"])]
+                                               + transfer_amount_concrete)
+                    global_state["balance"]['balance_'+str(I_vars["Is"])] = new_balance_is
+                    global_state["balance"]['balance_'+str(I_vars["Is"])] = new_balance_is_concrete
                 else:
-                    solver.pop()
-                    if isinstance(recipient, (int, long)):
-                        new_address_name = "concrete_address_" + str(recipient)
-                    else:
-                        new_address_name = gen.gen_arbitrary_address_var()
-                    old_balance_name = gen.gen_arbitrary_var()
-                    old_balance = BitVec(old_balance_name, 256)
-                    path_conditions_and_vars[old_balance_name] = old_balance
-                    constraint = (old_balance >= 0)
-                    solver.add(constraint)
-                    path_conditions_and_vars["path_condition"].append(constraint)
+                    new_address_name = recipient_concrete
+                    # concolic: old balance is a random number
+                    old_balance = random.randint(0, 2**256-1)
                     new_balance = (old_balance + transfer_amount)
-                    global_state["balance"][new_address_name] = new_balance
+                    new_balance_concrete = (old_balance + transfer_amount_concrete)
+                    global_state["balance"]['balance_'+str(new_address_name)] = new_balance
+                    global_state_concrete["balance"]['balance_'+str(new_address_name)] = new_balance_concrete
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "CALLCODE":
@@ -1597,29 +1582,42 @@ def sym_exec_ins(start, cur, instr,
             size_data_input = stack.pop(0)
             start_data_output = stack.pop(0)
             size_data_ouput = stack.pop(0)
+
+            outgas_concrete = stack_concrete.pop(0)
+            stack_concrete.pop(0)
+            transfer_amount_concrete = stack_concrete.pop(0)
+            start_data_input_concrete = stack_concrete.pop(0)
+            size_data_input_concrete = stack_concrete.pop(0)
+            start_data_output_concrete = stack_concrete.pop(0)
+            size_data_ouput_concrete = stack_concrete.pop(0)
             # in the paper, it is shaky when the size of data output is
             # min of stack[6] and the | o |
 
-            if isinstance(transfer_amount, (int, long)):
-                if transfer_amount == 0:
-                    stack.insert(0, 1)  # x = 0
-                    return
+            if not isinstance(transfer_amount, (int, long)):
+                all_linear = False
+
+            if transfer_amount_concrete == 0:
+                stack.insert(0, 1)  # x = 0
+                stack_concrete.insert(0, 1)  # x = 0
+                return
 
             # Let us ignore the call depth
-            balance_ia = global_state["balance"]["Ia"]
-            is_enough_fund = (balance_ia < transfer_amount)
-            solver.push()
-            solver.add(is_enough_fund)
+            balance_ia = global_state["balance"]['balance_'+str(I_vars["Ia"])]
+            if not isinstance(balance_ia, (int, long)):
+                all_linear = False
+            balance_ia_concrete = global_state_concrete["balance"]['balance_'+str(I_vars["Ia"])]
+            is_enough_fund = (balance_ia < transfer_amount)  # todo: reverse error?
+            is_enough_fund_concrete = (balance_ia_concrete < transfer_amount_concrete)
 
-            if solver.check() == unsat:
+            if not is_enough_fund_concrete:
                 # this means not enough fund, thus the execution will result in exception
-                solver.pop()
                 stack.insert(0, 0)  # x = 0
+                stack_concrete.insert(0, 0)  # x = 0
             else:
                 # the execution is possibly okay
                 stack.insert(0, 1)  # x = 1
-                solver.pop()
-                solver.add(is_enough_fund)
+                stack_concrete.insert(0, 1)  # x = 1
+
                 path_conditions_and_vars["path_condition"].append(is_enough_fund)
         else:
             raise ValueError('STACK underflow')
@@ -1636,20 +1634,17 @@ def sym_exec_ins(start, cur, instr,
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "SUICIDE":
         recipient = stack.pop(0)
-        transfer_amount = global_state["balance"]["Ia"]
-        global_state["balance"]["Ia"] = 0
-        if isinstance(recipient, (int, long)):
-            new_address_name = "concrete_address_" + str(recipient)
-        else:
-            new_address_name = gen.gen_arbitrary_address_var()
-        old_balance_name = gen.gen_arbitrary_var()
-        old_balance = BitVec(old_balance_name, 256)
-        path_conditions_and_vars[old_balance_name] = old_balance
-        constraint = (old_balance >= 0)
-        solver.add(constraint)
-        path_conditions_and_vars["path_condition"].append(constraint)
+        recipient_concrete = stack.pop(0)
+        transfer_amount = global_state["balance"]['balance_'+str(I_vars["Ia"])]
+        transfer_amount_concrete = global_state_concrete["balance"]['balance_'+str(I_vars["Ia"])]
+        global_state["balance"]['balance_'+str(I_vars["Ia"])] = 0
+        global_state_concrete["balance"]['balance_'+str(I_vars["Ia"])] = 0
+        new_address_name = recipient_concrete
+        old_balance = random.randint(0, 2**256-1)
         new_balance = (old_balance + transfer_amount)
-        global_state["balance"][new_address_name] = new_balance
+        new_balance_concrete = (old_balance + transfer_amount_concrete)
+        global_state["balance"]['balance_'+str(new_address_name)] = new_balance
+        global_state_concrete["balance"]['balance_'+str(new_address_name)] = new_balance_concrete
         # TODO
         return
 
