@@ -405,7 +405,7 @@ def add_falls_to():
             vertices[key].set_falls_to(target)
 
 
-def get_init_global_state(path_conditions_and_vars, vars_concrete):
+def get_init_global_state(path_conditions_and_vars):
     global I_vars, I_balance
     global I_constraint
     global_state = {"balance": {}}
@@ -418,7 +418,6 @@ def get_init_global_state(path_conditions_and_vars, vars_concrete):
             path_conditions_and_vars[new_var_name] = new_var
             if new_var_name not in I_vars:
                 I_vars[new_var_name] = random.randint(0, 2 ** 256 - 1)
-            vars_concrete[new_var_name] = I_vars[new_var_name]
 
     deposited_value = BitVec("Iv", 256)
     path_conditions_and_vars["Iv"] = deposited_value
@@ -427,7 +426,6 @@ def get_init_global_state(path_conditions_and_vars, vars_concrete):
         # rough estimate upper bound.
         # See https://ethereum.stackexchange.com/questions/16825/is-there-a-max-amount-of-gas-per-transaction
         I_vars["Iv"] = random.randint(0, 1e20)
-    vars_concrete["Iv"] = I_vars["Iv"]
 
     # the balance
     init_is = BitVec("init_Is", 256)
@@ -444,12 +442,12 @@ def get_init_global_state(path_conditions_and_vars, vars_concrete):
 
     global_state["balance"]["Is"] = (init_is - deposited_value)
     if I_vars["Is"] not in I_balance:
-        I_balance[I_vars["Is"]] = random.randint(0, 2 ** 256 - 1 - vars_concrete["Iv"])
+        I_balance[I_vars["Is"]] = random.randint(0, 2 ** 256 - 1 - I_vars["Iv"])
     global_state_concrete["balance"]["Is"] = I_balance[I_vars["Is"]]
 
     global_state["balance"]["Ia"] = (init_ia + deposited_value)
     if I_vars["Ia"] not in I_balance:
-        I_balance[I_vars["Ia"]] = random.randint(vars_concrete["Iv"], 2 ** 256 - 1)
+        I_balance[I_vars["Ia"]] = random.randint(I_vars["Iv"], 2 ** 256 - 1)
     global_state_concrete["balance"]["Ia"] = I_balance[I_vars["Ia"]]
 
     # the state of the current current contract
@@ -473,7 +471,6 @@ def full_concolic_exec():
     I_vars = {}  # init for specific var, e.g., Is
     I_gen = {}  # init for calldataload
     I_balance = {}  # init for global balance
-
 
     directed = 1
     while directed:
@@ -547,13 +544,12 @@ def instrumented_program(concolic_stack):
     visited = []
 
     path_conditions_and_vars = {"path_condition": []}
-    vars_concrete = {}
 
     global I_constraint
     I_constraint = []
 
     # this is init global state for this particular execution
-    global_state, global_state_concrete = get_init_global_state(path_conditions_and_vars, vars_concrete)
+    global_state, global_state_concrete = get_init_global_state(path_conditions_and_vars)
     analysis = init_analysis()
     l = 0
     k = 0
@@ -564,7 +560,7 @@ def instrumented_program(concolic_stack):
             stack, stack_concrete,
             mem, mem_concrete,
             global_state, global_state_concrete,
-            path_conditions_and_vars, vars_concrete,
+            path_conditions_and_vars,
             analysis,
             k, concolic_path_constraint, concolic_stack)
         if not if_continue:
@@ -578,7 +574,7 @@ def sym_exec_block(start, visited,
                    stack, stack_concrete,
                    mem, mem_concrete,
                    global_state, global_state_concrete,
-                   path_conditions_and_vars, vars_concrete,
+                   path_conditions_and_vars,
                    analysis,
                    k, concolic_path_constraint, concolic_stack):
     if start < 0:
@@ -607,7 +603,7 @@ def sym_exec_block(start, visited,
                          stack, stack_concrete,
                          mem, mem_concrete,
                          global_state, global_state_concrete,
-                         path_conditions_and_vars, vars_concrete,
+                         path_conditions_and_vars,
                          analysis)
         except Exception as e:
             print(e)
@@ -674,10 +670,10 @@ def sym_exec_ins(start, cur, instr,
                  stack, stack_concrete,
                  mem, mem_concrete,
                  global_state, global_state_concrete,
-                 path_conditions_and_vars, var_concrete,
+                 path_conditions_and_vars,
                  analysis):
     global all_linear, all_locs_definite
-    global I_gen, I_vars
+    global I_gen, I_vars, I_balance
     # print("""step %d""", instr)
     instr_parts = str.split(instr, ' ')
 
@@ -1147,7 +1143,25 @@ def sym_exec_ins(start, cur, instr,
         stack.insert(0, I_vars[new_var_name])
     elif instr_parts[0] == "BALANCE":
         if len(stack) > 0:
-            address = stack.pop(0)
+            # position is always a constant
+            stack.pop(0)
+            position = stack_concrete.pop()
+            key = 'balance_'+str(position)
+            if key in global_state:
+                stack.insert(0, global_state[key])
+                stack_concrete.insert(0, global_state_concrete[key])
+            else:
+                I_gen[key] = random.randint(0, 2**256 - 1)
+                new_var = BitVec(key, 256)
+                stack.insert(0, new_var)
+                stack_concrete.insert(0, I_gen[key])
+                #todo: global state, global state concrete
+
+            # if not, init the variable
+            # todo: assign concrete to concrete global state
+
+
+
             new_var_name = gen.gen_balance_var()
             if new_var_name in path_conditions_and_vars:
                 new_var = path_conditions_and_vars[new_var_name]
@@ -1191,7 +1205,9 @@ def sym_exec_ins(start, cur, instr,
             key = 'Id_'+str(position)
             if key not in I_gen:
                 I_gen[key] = random.randint(0, 2 ** 256 - 1)  # max 1024
-            stack.insert(0, BitVec(key, 256))
+                path_conditions_and_vars[key] = BitVec(key, 256)
+            # todo: if call multiple times with same position, should return same variable
+            stack.insert(0, path_conditions_and_vars[key])
             stack_concrete.insert(0, I_gen[key])
         else:
             raise ValueError('STACK underflow')
