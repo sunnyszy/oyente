@@ -444,13 +444,13 @@ def get_init_global_state(path_conditions_and_vars):
     global_state["balance"][new_var_name] = (init_is - deposited_value)
     if new_var_name not in I_balance:
         I_balance[new_var_name] = random.randint(0, 2 ** 256 - 1 - I_vars["Iv"])
-    global_state_concrete["balance"][new_var_name] = I_balance[I_vars["Is"]]
+    global_state_concrete["balance"][new_var_name] = I_balance[new_var_name]
 
     new_var_name = 'balance_' + str(I_vars["Ia"])
     global_state["balance"][new_var_name] = (init_ia + deposited_value)
     if new_var_name not in I_balance:
         I_balance[new_var_name] = random.randint(I_vars["Iv"], 2 ** 256 - 1)
-    global_state_concrete["balance"][new_var_name] = I_balance[I_vars["Ia"]]
+    global_state_concrete["balance"][new_var_name] = I_balance[new_var_name]
 
     # the state of the current current contract
     global_state["Ia"] = {}
@@ -776,9 +776,7 @@ def sym_exec_ins(start, cur, instr,
                     computed = first % second
                     computed_concrete = first_concrete % second_concrete
             else:
-                solver.push()
-                solver.add(Not(second == 0))
-                if solver.check() == unsat:
+                if second_concrete == 0:
                     # it is provable that second is indeed equal to zero
                     computed = 0
                     computed_concrete = 0
@@ -790,7 +788,6 @@ def sym_exec_ins(start, cur, instr,
                         computed_concrete = 0
                     else:
                         computed_concrete = first_concrete % second_concrete
-                solver.pop()
             stack.insert(0, computed)
             stack_concrete.insert(0, computed_concrete)
         else:
@@ -811,9 +808,7 @@ def sym_exec_ins(start, cur, instr,
                     computed = first % second  # This is not yet faithful
                     computed_concrete = first_concrete % second_concrete
             else:
-                solver.push()
-                solver.add(Not(second == 0))
-                if solver.check() == unsat:
+                if second_concrete == 0:
                     # it is provable that second is indeed equal to zero
                     computed = 0
                     computed_concrete = 0
@@ -825,7 +820,6 @@ def sym_exec_ins(start, cur, instr,
                         computed_concrete = 0
                     else:
                         computed_concrete = first_concrete % second_concrete
-                solver.pop()
             stack.insert(0, computed)
             stack_concrete.insert(0, computed_concrete)
         else:
@@ -853,9 +847,7 @@ def sym_exec_ins(start, cur, instr,
                     computed = (first + second) % third
                     computed_concrete = (first_concrete + second_concrete) % third_concrete
             else:
-                solver.push()
-                solver.add(Not(third == 0))
-                if solver.check() == unsat:
+                if third_concrete == 0:
                     # it is provable that second is indeed equal to zero
                     computed = 0
                     computed_concrete = 0
@@ -869,7 +861,6 @@ def sym_exec_ins(start, cur, instr,
                         computed_concrete = 0
                     else:
                         computed_concrete = (first_concrete + second_concrete) % third_concrete
-                solver.pop()
             stack.insert(0, computed)
             stack_concrete.insert(0, computed_concrete)
         else:
@@ -906,7 +897,6 @@ def sym_exec_ins(start, cur, instr,
                     computed_concrete = 0
                 else:
                     computed_concrete = (first_concrete * second_concrete) % third_concrete
-                solver.pop()
             stack.insert(0, computed)
             stack_concrete.insert(0, computed_concrete)
         else:
