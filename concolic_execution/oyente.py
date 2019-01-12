@@ -66,7 +66,7 @@ def main():
 
         # TODO: Do this as an import and run, instead of shell call and hacky fix
 
-        os.system('python symExec.py %s.disasm %d %d %d %d %d %d %d %d %d %d %s' % (
+        os.system('python concExec.py %s.disasm %d %d %d %d %d %d %d %d %d %d %s' % (
             args.source, global_params.IGNORE_EXCEPTIONS, global_params.REPORT_MODE, global_params.PRINT_MODE,
             global_params.DATA_FLOW, global_params.DEBUG_MODE, global_params.CHECK_CONCURRENCY_FP,
             global_params.TIMEOUT,
@@ -109,7 +109,7 @@ def main():
             of.write(disasm_out)
 
         # TODO: Do this as an import and run, instead of shell call and hacky fix
-        print ('python symExec.py %s.evm.disasm %d %d %d %d %d %d %d %d %d %d %s' % (
+        print ('python concExec.py %s.evm.disasm %d %d %d %d %d %d %d %d %d %d %s' % (
             cname, global_params.IGNORE_EXCEPTIONS, global_params.REPORT_MODE, global_params.PRINT_MODE,
             global_params.DATA_FLOW, global_params.DEBUG_MODE, global_params.CHECK_CONCURRENCY_FP,
             global_params.TIMEOUT,
