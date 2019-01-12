@@ -488,7 +488,7 @@ def solve_path_constraint(k, concolic_path_constraint, concolic_stack, path_cond
     global I_vars, I_gen, I_balance, I_store
     global I_constraint
     j = k - 1
-    while concolic_stack[j][1] and j >= 0:
+    while j >= 0 and concolic_stack[j][1]:
         j -= 1
     if j == -1:
         return 0, -1
@@ -577,6 +577,8 @@ def instrumented_program(concolic_stack):
 
 
 def sym_add(first, second):
+    if isinstance(first, (int, long)) and isinstance(second, (int, long)):
+        return conc_add(first, second)
     if isinstance(first, (int, long)):
         first = BitVecVal(first, 256)
     if isinstance(second, (int, long)):
@@ -585,6 +587,8 @@ def sym_add(first, second):
 
 
 def sym_minus(first, second):
+    if isinstance(first, (int, long)) and isinstance(second, (int, long)):
+        return conc_minus(first, second)
     if isinstance(first, (int, long)):
         first = BitVecVal(first, 256)
     if isinstance(second, (int, long)):
@@ -593,6 +597,8 @@ def sym_minus(first, second):
 
 
 def sym_times(first, second):
+    if isinstance(first, (int, long)) and isinstance(second, (int, long)):
+        return conc_times(first, second)
     if isinstance(first, (int, long)):
         first = BitVecVal(first, 256)
     if isinstance(second, (int, long)):
@@ -601,6 +607,8 @@ def sym_times(first, second):
 
 
 def sym_divide(first, second):
+    if isinstance(first, (int, long)) and isinstance(second, (int, long)):
+        return conc_divide(first, second)
     if isinstance(first, (int, long)):
         first = BitVecVal(first, 256)
     if isinstance(second, (int, long)):
@@ -1530,7 +1538,7 @@ def sym_exec_ins(start, cur, instr,
                     old_balance = global_state["balance"][new_var_name]
                     old_balance_concrete = global_state_concrete["balance"][new_var_name]
                     new_balance = sym_add(old_balance, transfer_amount)
-                    new_balance_concrete = conc_add(old_balance_concrete + transfer_amount_concrete)
+                    new_balance_concrete = conc_add(old_balance_concrete, transfer_amount_concrete)
                     global_state["balance"][new_var_name] = new_balance
                     global_state_concrete["balance"][new_var_name] = new_balance_concrete
         else:
@@ -1616,7 +1624,7 @@ def sym_exec_ins(start, cur, instr,
         old_balance = global_state["balance"][new_var_name]
         old_balance_concrete = global_state_concrete["balance"][new_var_name]
         new_balance = sym_add(old_balance, transfer_amount)
-        new_balance_concrete = conc_add(old_balance_concrete + transfer_amount_concrete)
+        new_balance_concrete = conc_add(old_balance_concrete, transfer_amount_concrete)
         global_state["balance"][new_var_name] = new_balance
         global_state_concrete["balance"][new_var_name] = new_balance_concrete
         # TODO
