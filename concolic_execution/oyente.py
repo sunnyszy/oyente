@@ -65,6 +65,7 @@ def main():
             of.write(disasm_out)
 
         # TODO: Do this as an import and run, instead of shell call and hacky fix
+        print('python concExec.py tmp_0.evm.disasm 0 0 0 0 0 1 1000 0 300 0 tmp_0.evm.json')
 
         os.system('python concExec.py %s.disasm %d %d %d %d %d %d %d %d %d %d %s' % (
             args.source, global_params.IGNORE_EXCEPTIONS, global_params.REPORT_MODE, global_params.PRINT_MODE,

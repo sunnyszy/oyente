@@ -121,7 +121,6 @@ def main():
         raise
         print "Exception - " + str(e)
         print "Time out"
-    # print "Running time " + str(time.time()-start)
     signal.alarm(0)
 
     if REPORT_MODE:
@@ -131,6 +130,7 @@ def main():
     detect_time_dependency()
     run_early_pay_attack()
     stop = time.time()
+    results['duration'] = time.time()-start
     if REPORT_MODE:
         rfile.write(str(stop - start))
         rfile.close()
@@ -576,6 +576,53 @@ def instrumented_program(concolic_stack):
     return solve_path_constraint(k, concolic_path_constraint, concolic_stack, path_conditions_and_vars)
 
 
+def sym_add(first, second):
+    if isinstance(first, (int, long)):
+        first = BitVecVal(first, 256)
+    if isinstance(second, (int, long)):
+        second = BitVecVal(second, 256)
+    return first + second
+
+
+def sym_minus(first, second):
+    if isinstance(first, (int, long)):
+        first = BitVecVal(first, 256)
+    if isinstance(second, (int, long)):
+        second = BitVecVal(second, 256)
+    return first - second
+
+
+def sym_times(first, second):
+    if isinstance(first, (int, long)):
+        first = BitVecVal(first, 256)
+    if isinstance(second, (int, long)):
+        second = BitVecVal(second, 256)
+    return first * second
+
+
+def sym_divide(first, second):
+    if isinstance(first, (int, long)):
+        first = BitVecVal(first, 256)
+    if isinstance(second, (int, long)):
+        second = BitVecVal(second, 256)
+    return first / second
+
+
+def conc_add(first, second):
+    return simplify(BitVecVal(first+second, 256)).as_long()
+
+
+def conc_minus(first, second):
+    return simplify(BitVecVal(first-second, 256)).as_long()
+
+
+def conc_times(first, second):
+    return simplify(BitVecVal(first*second, 256)).as_long()
+
+
+def conc_divide(first, second):
+    return simplify(BitVecVal(first/second, 256)).as_long()
+
 # Symbolically executing a block from the start address
 def sym_exec_block(start, visited,
                    stack, stack_concrete,
@@ -703,12 +750,8 @@ def sym_exec_ins(start, cur, instr,
             first_concrete = stack_concrete.pop(0)
             second = stack.pop(0)
             second_concrete = stack_concrete.pop(0)
-            if isinstance(first, (int, long)) and not isinstance(second, (int, long)):
-                first = BitVecVal(first, 256)
-            elif not isinstance(first, (int, long)) and isinstance(second, (int, long)):
-                second = BitVecVal(second, 256)
-            computed = first + second
-            computed_concrete = first_concrete + second_concrete
+            computed = sym_add(first, second)
+            computed_concrete = conc_add(first_concrete, second_concrete)
             stack.insert(0, computed)
             stack_concrete.insert(0, computed_concrete)
         else:
@@ -719,12 +762,8 @@ def sym_exec_ins(start, cur, instr,
             first_concrete = stack_concrete.pop(0)
             second = stack.pop(0)
             second_concrete = stack_concrete.pop(0)
-            if isinstance(first, (int, long)) and not isinstance(second, (int, long)):
-                first = BitVecVal(first, 256)
-            elif not isinstance(first, (int, long)) and isinstance(second, (int, long)):
-                second = BitVecVal(second, 256)
-            computed = first * second
-            computed_concrete = first_concrete * second_concrete
+            computed = sym_times(first, second)
+            computed_concrete = conc_times(first_concrete, second_concrete)
             stack.insert(0, computed)
             stack_concrete.insert(0, computed_concrete)
         else:
@@ -735,12 +774,8 @@ def sym_exec_ins(start, cur, instr,
             first_concrete = stack_concrete.pop(0)
             second = stack.pop(0)
             second_concrete = stack_concrete.pop(0)
-            if isinstance(first, (int, long)) and not isinstance(second, (int, long)):
-                first = BitVecVal(first, 256)
-            elif not isinstance(first, (int, long)) and isinstance(second, (int, long)):
-                second = BitVecVal(second, 256)
-            computed = first - second
-            computed_concrete = first_concrete - second_concrete
+            computed = sym_minus(first, second)
+            computed_concrete = conc_minus(first_concrete, second_concrete)
             stack.insert(0, computed)
             stack_concrete.insert(0, computed_concrete)
         else:
@@ -751,12 +786,8 @@ def sym_exec_ins(start, cur, instr,
             first_concrete = stack_concrete.pop(0)
             second = stack.pop(0)
             second_concrete = stack_concrete.pop(0)
-            if isinstance(first, (int, long)) and not isinstance(second, (int, long)):
-                first = BitVecVal(first, 256)
-            elif not isinstance(first, (int, long)) and isinstance(second, (int, long)):
-                second = BitVecVal(second, 256)
-            computed = first / second
-            computed_concrete = simplify(BitVecVal(first_concrete, 256) / BitVecVal(second_concrete, 256)).as_long()
+            computed = sym_divide(first, second)
+            computed_concrete = conc_divide(first_concrete, second_concrete)
             stack.insert(0, computed)
             stack_concrete.insert(0, computed_concrete)
         else:
@@ -768,28 +799,12 @@ def sym_exec_ins(start, cur, instr,
             second = stack.pop(0)
             second_concrete = stack_concrete.pop(0)
 
-            if isinstance(second, (int, long)):
-                if second == 0:
-                    computed = 0
-                    computed_concrete = 0
-                else:
-                    if not isinstance(first, (int, long)):
-                        second = BitVecVal(second, 256)  # Make second a bitvector
-                    computed = first % second
-                    computed_concrete = first_concrete % second_concrete
+            if second_concrete == 0:
+                computed = 0
+                computed_concrete = 0
             else:
-                if second_concrete == 0:
-                    # it is provable that second is indeed equal to zero
-                    computed = 0
-                    computed_concrete = 0
-                else:
-                    if isinstance(first, (int, long)):
-                        first = BitVecVal(first, 256)  # Make first a bitvector
-                    computed = first % second
-                    if second_concrete == 0:
-                        computed_concrete = 0
-                    else:
-                        computed_concrete = first_concrete % second_concrete
+                computed = first % second
+                computed_concrete = first_concrete % second_concrete
             stack.insert(0, computed)
             stack_concrete.insert(0, computed_concrete)
         else:
@@ -800,28 +815,13 @@ def sym_exec_ins(start, cur, instr,
             first_concrete = stack_concrete.pop(0)
             second = stack.pop(0)
             second_concrete = stack_concrete.pop(0)
-            if isinstance(second, (int, long)):
-                if second == 0:
-                    computed = 0
-                    computed_concrete = 0
-                else:
-                    if not isinstance(first, (int, long)):
-                        second = BitVecVal(second, 256)  # Make second a bitvector
-                    computed = first % second  # This is not yet faithful
-                    computed_concrete = first_concrete % second_concrete
+
+            if second_concrete == 0:
+                computed = 0
+                computed_concrete = 0
             else:
-                if second_concrete == 0:
-                    # it is provable that second is indeed equal to zero
-                    computed = 0
-                    computed_concrete = 0
-                else:
-                    if isinstance(first, (int, long)):
-                        first = BitVecVal(first, 256)  # Make first a bitvector
-                    computed = first % second  # This is not yet faithful
-                    if second_concrete == 0:
-                        computed_concrete = 0
-                    else:
-                        computed_concrete = first_concrete % second_concrete
+                computed = first % second
+                computed_concrete = first_concrete % second_concrete
             stack.insert(0, computed)
             stack_concrete.insert(0, computed_concrete)
         else:
@@ -834,35 +834,13 @@ def sym_exec_ins(start, cur, instr,
             second_concrete = stack_concrete.pop(0)
             third = stack.pop(0)
             third_concrete = stack_concrete.pop(0)
-            if isinstance(third, (int, long)):
-                if third == 0:
-                    computed = 0
-                    computed_concrete = 0
-                else:
-                    if not (isinstance(first, (int, long)) and isinstance(second, (int, long))):
-                        # there is one guy that is a symbolic expression
-                        third = BitVecVal(third, 256)
-                        if isinstance(first, (int, long)):
-                            first = BitVecVal(first, 256)
-                        if isinstance(second, (int, long)):
-                            second = BitVecVal(second, 256)
-                    computed = (first + second) % third
-                    computed_concrete = (first_concrete + second_concrete) % third_concrete
+            if third_concrete == 0:
+                computed = 0
+                computed_concrete = 0
             else:
-                if third_concrete == 0:
-                    # it is provable that second is indeed equal to zero
-                    computed = 0
-                    computed_concrete = 0
-                else:
-                    if isinstance(first, (int, long)):
-                        first = BitVecVal(first, 256)
-                    if isinstance(second, (int, long)):
-                        second = BitVecVal(second, 256)
-                    computed = (first + second) % third
-                    if third_concrete == 0:
-                        computed_concrete = 0
-                    else:
-                        computed_concrete = (first_concrete + second_concrete) % third_concrete
+                # there is one guy that is a symbolic expression
+                computed = sym_add(first, second) % third
+                computed_concrete = conc_add(first_concrete, second_concrete) % third_concrete
             stack.insert(0, computed)
             stack_concrete.insert(0, computed_concrete)
         else:
@@ -875,30 +853,15 @@ def sym_exec_ins(start, cur, instr,
             second_concrete = stack_concrete.pop(0)
             third = stack.pop(0)
             third_concrete = stack_concrete.pop(0)
-            if isinstance(third, (int, long)):
-                if third == 0:
-                    computed = 0
-                    computed_concrete = 0
-                else:
-                    if not (isinstance(first, (int, long)) and isinstance(second, (int, long))):
-                        # there is one guy that is a symbolic expression
-                        third = BitVecVal(third, 256)
-                        if isinstance(first, (int, long)):
-                            first = BitVecVal(first, 256)
-                        if isinstance(second, (int, long)):
-                            second = BitVecVal(second, 256)
-                    computed = (first * second) % third
-                    computed_concrete = (first_concrete * second_concrete) % third_concrete
+            if third_concrete == 0:
+                computed = 0
+                computed_concrete = 0
             else:
-                if isinstance(first, (int, long)):
-                    first = BitVecVal(first, 256)
-                if isinstance(second, (int, long)):
-                    second = BitVecVal(second, 256)
-                computed = (first * second) % third
-                if third_concrete == 0:
-                    computed_concrete = 0
-                else:
-                    computed_concrete = (first_concrete * second_concrete) % third_concrete
+                # there is one guy that is a symbolic expression
+                if isinstance(third, (int, long)):
+                    third = BitVecVal(third, 256)
+                computed = sym_times(first, second) % third
+                computed_concrete = conc_add(first_concrete, second_concrete) % third_concrete
             stack.insert(0, computed)
             stack_concrete.insert(0, computed_concrete)
         else:
@@ -909,7 +872,7 @@ def sym_exec_ins(start, cur, instr,
             stack.pop(0)
             base_concrete = stack_concrete.pop(0)
             exponent_concrete = stack_concrete.pop(0)
-            computed = base_concrete ** exponent_concrete
+            computed = simplify(BitVecVal(base_concrete ** exponent_concrete, 256)).as_long()
             stack.insert(0, computed)
             stack_concrete.insert(0, computed)
             all_linear = False
@@ -921,6 +884,8 @@ def sym_exec_ins(start, cur, instr,
             _ = stack.pop(0)
             index_concrete = stack_concrete.pop(0)
             content_concrete = stack_concrete.pop(0)
+            if index_concrete > 31:
+                raise ValueError('Index concrete should < 32')
             msb = 2**(8+8*index_concrete)
             content_concrete = (2**msb-1) & content_concrete
             mask = (2**msb) >> 1
@@ -1094,16 +1059,11 @@ def sym_exec_ins(start, cur, instr,
             first = stack.pop(0)
             first_concrete = stack_concrete.pop(0)
             if isinstance(first, (int, long)):
-                #todo: not handle correctly
-                complement = -1 - first
-                computed_concrete = -1 - first_concrete
-                stack.insert(0, complement)
-                stack_concrete.insert(0, computed_concrete)
-            else:
-                sym_expression = (~ first)
-                stack.insert(0, sym_expression)
-                computed_concrete = (1 << 256) - 1 - first_concrete
-                stack_concrete.insert(0, computed_concrete)
+                first = BitVecVal(first, 256)
+            sym_expression = (~ first)
+            computed_concrete = (1 << 256) - 1 - first_concrete
+            stack.insert(0, sym_expression)
+            stack_concrete.insert(0, computed_concrete)
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "BYTE":
@@ -1118,7 +1078,7 @@ def sym_exec_ins(start, cur, instr,
             # todo: deterministic variable but not implement correctly
             a = stack_concrete.pop(0)
             b = stack_concrete.pop(0)
-            res = hash(a+b)
+            res = simplify(BitVecVal(hash(a+b), 256)).as_long()
             # push into the execution a fresh symbolic variable
             stack.insert(0, res)
             stack_concrete.insert(0, res)
@@ -1395,8 +1355,9 @@ def sym_exec_ins(start, cur, instr,
             stored_value = stack.pop(0)
             stored_address_concrete = stack_concrete.pop(0)
             stored_value_concrete = stack_concrete.pop(0)
-            global_state["Ia"][stored_address_concrete] = stored_value  # note that the stored_value could be unknown
-            global_state_concrete["Ia"][stored_address_concrete] = stored_value_concrete
+            new_var_name = "Ia_store_"+str(stored_address_concrete)
+            global_state["Ia"][new_var_name] = stored_value  # note that the stored_value could be unknown
+            global_state_concrete["Ia"][new_var_name] = stored_value_concrete
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "JUMP":
@@ -1431,7 +1392,7 @@ def sym_exec_ins(start, cur, instr,
         # this is not hard, but tedious. Let's skip it for now
         raise Exception('Must implement PC now')
     elif instr_parts[0] == "MSIZE":
-        msize = 32 * global_state["miu_i"]
+        msize = conc_times(32, global_state["miu_i"])
         stack.insert(0, msize)
         stack_concrete.insert(0, msize)
     elif instr_parts[0] == "GAS":
@@ -1556,13 +1517,22 @@ def sym_exec_ins(start, cur, instr,
                     global_state["balance"]['balance_'+str(I_vars["Is"])] = new_balance_is
                     global_state["balance"]['balance_'+str(I_vars["Is"])] = new_balance_is_concrete
                 else:
-                    new_address_name = recipient_concrete
-                    # concolic: old balance is a random number
-                    old_balance = random.randint(0, 2**256-1)
-                    new_balance = (old_balance + transfer_amount)
-                    new_balance_concrete = (old_balance + transfer_amount_concrete)
-                    global_state["balance"]['balance_'+str(new_address_name)] = new_balance
-                    global_state_concrete["balance"]['balance_'+str(new_address_name)] = new_balance_concrete
+                    new_var_name = 'balance_'+str(recipient_concrete)
+
+                    if new_var_name not in global_state["balance"]:
+                        if new_var_name not in I_balance:
+                            I_balance[new_var_name] = random.randint(0, 2**256 - 1)
+                        if new_var_name not in path_conditions_and_vars:
+                            path_conditions_and_vars[new_var_name] = BitVec(new_var_name, 256)
+                        global_state["balance"][new_var_name] = path_conditions_and_vars[new_var_name]
+                        global_state_concrete["balance"][new_var_name] = I_balance[new_var_name]
+
+                    old_balance = global_state["balance"][new_var_name]
+                    old_balance_concrete = global_state_concrete["balance"][new_var_name]
+                    new_balance = sym_add(old_balance, transfer_amount)
+                    new_balance_concrete = conc_add(old_balance_concrete + transfer_amount_concrete)
+                    global_state["balance"][new_var_name] = new_balance
+                    global_state_concrete["balance"][new_var_name] = new_balance_concrete
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "CALLCODE":
@@ -1632,12 +1602,23 @@ def sym_exec_ins(start, cur, instr,
         transfer_amount_concrete = global_state_concrete["balance"]['balance_'+str(I_vars["Ia"])]
         global_state["balance"]['balance_'+str(I_vars["Ia"])] = 0
         global_state_concrete["balance"]['balance_'+str(I_vars["Ia"])] = 0
-        new_address_name = recipient_concrete
-        old_balance = random.randint(0, 2**256-1)
-        new_balance = (old_balance + transfer_amount)
-        new_balance_concrete = (old_balance + transfer_amount_concrete)
-        global_state["balance"]['balance_'+str(new_address_name)] = new_balance
-        global_state_concrete["balance"]['balance_'+str(new_address_name)] = new_balance_concrete
+
+        new_var_name = 'balance_'+str(recipient_concrete)
+
+        if new_var_name not in global_state["balance"]:
+            if new_var_name not in I_balance:
+                I_balance[new_var_name] = random.randint(0, 2**256 - 1)
+            if new_var_name not in path_conditions_and_vars:
+                path_conditions_and_vars[new_var_name] = BitVec(new_var_name, 256)
+            global_state["balance"][new_var_name] = path_conditions_and_vars[new_var_name]
+            global_state_concrete["balance"][new_var_name] = I_balance[new_var_name]
+
+        old_balance = global_state["balance"][new_var_name]
+        old_balance_concrete = global_state_concrete["balance"][new_var_name]
+        new_balance = sym_add(old_balance, transfer_amount)
+        new_balance_concrete = conc_add(old_balance_concrete + transfer_amount_concrete)
+        global_state["balance"][new_var_name] = new_balance
+        global_state_concrete["balance"][new_var_name] = new_balance_concrete
         # TODO
         return
 
