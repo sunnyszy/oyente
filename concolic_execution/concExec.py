@@ -118,14 +118,15 @@ def main():
         if PRINT_MODE:
             print "Done Symbolic execution"
     except Exception as e:
-        raise
         print "Exception - " + str(e)
         print "Time out"
+        raise
     signal.alarm(0)
 
     if REPORT_MODE:
         rfile.write(str(total_no_of_paths) + "\n")
 
+    print('detecting...')
     detect_money_concurrency()
     detect_time_dependency()
     run_early_pay_attack()
@@ -617,19 +618,29 @@ def sym_divide(first, second):
 
 
 def conc_add(first, second):
-    return simplify(BitVecVal(first+second, 256)).as_long()
+    return (first+second) % (2**256)
 
 
 def conc_minus(first, second):
-    return simplify(BitVecVal(first-second, 256)).as_long()
+    return (first-second) % (2**256)
 
 
 def conc_times(first, second):
-    return simplify(BitVecVal(first*second, 256)).as_long()
+    return (first*second) % (2**256)
 
 
 def conc_divide(first, second):
-    return simplify(BitVecVal(first/second, 256)).as_long()
+    if second == 0:
+        return (-1) % (2**256)
+    else:
+        return first / second
+
+
+def conc_power(first, second):
+    if second >= 256:
+        return 0
+    else:
+        return (first ** second)%(2**256)
 
 # Symbolically executing a block from the start address
 def sym_exec_block(start, visited,
@@ -880,7 +891,7 @@ def sym_exec_ins(start, cur, instr,
             stack.pop(0)
             base_concrete = stack_concrete.pop(0)
             exponent_concrete = stack_concrete.pop(0)
-            computed = simplify(BitVecVal(base_concrete ** exponent_concrete, 256)).as_long()
+            computed = conc_power(base_concrete, exponent_concrete)
             stack.insert(0, computed)
             stack_concrete.insert(0, computed)
             all_linear = False
