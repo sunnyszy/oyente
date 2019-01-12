@@ -1,4 +1,4 @@
-contract tod_true {
+contract tod {
     uint public flag;
 
     function update_flag(uint _flag) {

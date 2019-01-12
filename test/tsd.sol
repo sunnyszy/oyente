@@ -1,4 +1,4 @@
-contract tsd_true {
+contract tsd {
     function myfunc() {
         if (block.timestamp > 0) {
             }

@@ -1383,6 +1383,7 @@ def sym_exec_ins(start, cur, instr,
                 global_state_concrete["Ia"][new_var_name] = I_store[new_var_name]
                 stack.insert(0, global_state["Ia"][new_var_name])
                 stack_concrete.insert(0, global_state_concrete["Ia"][new_var_name])
+                path_conditions_and_vars[new_var_name] = global_state["Ia"][new_var_name]
         else:
             raise ValueError('STACK underflow')
     elif instr_parts[0] == "SSTORE":
