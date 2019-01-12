@@ -515,9 +515,11 @@ def solve_path_constraint(k, concolic_path_constraint, concolic_stack, path_cond
                 else:
                     raise KeyError('Got a variable not in I')
                 match_d[name] = m[d].as_long()
+            solver.pop()
             return 1, concolic_stack[0:j+1]
         else:
-            return solve_path_constraint(j, path_conditions, concolic_stack, path_conditions_and_vars)
+            solver.pop()
+            return solve_path_constraint(j, concolic_path_constraint, concolic_stack, path_conditions_and_vars)
 
 
 def compare_and_update_stack(branch, k, stack):

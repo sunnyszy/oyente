@@ -1,6 +1,5 @@
 contract simple {
-    function myfunc() {
-        if (block.timestamp > 0) {
-            }
+    function myfunc(uint x, uint y) public returns (uint z) {
+        z = x + y;
     }
 }
