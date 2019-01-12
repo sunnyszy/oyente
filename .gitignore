@@ -11,7 +11,8 @@ contract_data
 .DS_Store
 *.disasm.log
 
-tmp.evm
+tmp*.evm
+time*.txt
 
 //jetbrain ide
 .idea

@@ -129,6 +129,7 @@ def main():
 
     detect_money_concurrency()
     detect_time_dependency()
+    run_early_pay_attack()
     stop = time.time()
     if REPORT_MODE:
         rfile.write(str(stop - start))
@@ -136,7 +137,6 @@ def main():
     if DATA_FLOW:
         detect_data_concurrency()
         detect_data_money_concurrency()
-        run_early_pay_attack()
     if PRINT_MODE:
         print "Results for Reentrancy Bug: " + str(reentrancy_all_paths)
     reentrancy_bug_found = any([v for sublist in reentrancy_all_paths for v in sublist])
@@ -1121,7 +1121,7 @@ def sym_exec_ins(start, cur, instr,
             res = hash(a+b)
             # push into the execution a fresh symbolic variable
             stack.insert(0, res)
-            stack_concrete(0, res)
+            stack_concrete.insert(0, res)
         else:
             raise ValueError('STACK underflow')
     #

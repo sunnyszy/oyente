@@ -4,6 +4,7 @@ import glob
 import os
 import sys
 import urllib2
+import time
 
 contract_dir = '/opt/project/contract_data'
 
@@ -37,21 +38,25 @@ if len(sys.argv)>=3:
 	contracts = contracts[(len(contracts)/cores)*job:(len(contracts)/cores)*(job+1)]
 	print "Job %d: Running on %d contracts..." % (job, len(contracts))
 cntnum = 0
+start_time = time.time()
 for c in contracts:
-	with open('tmp.evm','w') as of:
+	with open('tmp_'+str(job)+'.evm','w') as of:
 		# print "Out: "+cjson[c][1][2:]
 		of.write(cjson[c][1][2:]+"\0")
-	os.system('python oyente.py tmp.evm -j -b')
+	os.system('python oyente.py tmp_'+str(job)+'.evm -j -b')
 	try:
-		results[c] = json.loads(open('tmp.evm.json').read())
+		results[c] = json.loads(open('tmp_'+str(job)+'.evm.json').read())
 	except:
 		missed.append(c)
-	with open('results.json', 'w') as of:
-		of.write(json.dumps(results,indent=1))
-	with open('missed.json', 'w') as of:
-		of.write(json.dumps(missed,indent=1))
-	# urllib2.urlopen('https://dweet.io/dweet/for/oyente-%d-%d?completed=%d&missed=%d&remaining=%d' % (job,cores,len(results),len(missed),len(contracts)-len(results)-len(missed)))
 	if cntnum == 2:
 		break
 	cntnum += 1
+with open('results_'+str(job)+'.json', 'w') as of:
+	of.write(json.dumps(results,indent=1))
+with open('missed_'+str(job)+'.json', 'w') as of:
+	of.write(json.dumps(missed,indent=1))
+	# urllib2.urlopen('https://dweet.io/dweet/for/oyente-%d-%d?completed=%d&missed=%d&remaining=%d' % (job,cores,len(results),len(missed),len(contracts)-len(results)-len(missed)))
 print "Completed."
+duration = time.time() - start_time
+with open('time_'+str(job)+'.txt', 'w') as of:
+	of.write(str(duration))

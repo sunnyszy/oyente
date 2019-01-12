@@ -14,7 +14,7 @@ DATA_FLOW = 0
 DEBUG_MODE = 0
 
 # check false positive in concurrency
-CHECK_CONCURRENCY_FP = 1
+CHECK_CONCURRENCY_FP = 0
 
 # Timeout for z3
 TIMEOUT = 1000
