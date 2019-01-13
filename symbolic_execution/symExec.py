@@ -108,19 +108,20 @@ def main():
         if PRINT_MODE:
             print "Done Symbolic execution"
     except Exception as e:
-        raise
         print "Exception - " + str(e)
         print "Time out"
-    # print "Running time " + str(time.time()-start)
+        raise
     signal.alarm(0)
 
     if REPORT_MODE:
         rfile.write(str(total_no_of_paths) + "\n")
 
+    print "detecting..."
     detect_money_concurrency()
     detect_time_dependency()
     run_early_pay_attack()
     stop = time.time()
+    results['duration'] = time.time()-start
     if REPORT_MODE:
         rfile.write(str(stop - start))
         rfile.close()

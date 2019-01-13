@@ -47,16 +47,14 @@ with open('results_' + str(job) + '.json', 'w') as of_result:
             # print "Out: "+cjson[c][1][2:]
             of.write(cjson[c][1][2:] + "\0")
         # exit(0)
-        os.system('python oyente.py tmp_' + str(job) + '.evm -j -b')
+        os.system('python2 oyente.py tmp_' + str(job) + '.evm -j -b')
         try:
             results[c] = json.loads(open('tmp_' + str(job) + '.evm.json').read())
         except:
             results[c] = {}
         # if cntnum == 2:
-        # 	break
         of_result.write(json.dumps(results, indent=1))
         of_result.flush()
-        cntnum += 1
         # break
-    # urllib2.urlopen('https://dweet.io/dweet/for/oyente-%d-%d?completed=%d&missed=%d&remaining=%d' % (job,cores,len(results),len(missed),len(contracts)-len(results)-len(missed)))
+        cntnum += 1
 print "Completed."
