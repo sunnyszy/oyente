@@ -1487,8 +1487,10 @@ def run_early_pay_attack():
     tmp = sorted(set(earlypay_all_paths))
     if (len(tmp) > 0):
         print "\t  EarlyPay Warning Founded in: " + str(tmp)
+        results['early_pay'] = True
     else:
         print "\t  EarlyPay Warning:\t False"
+        results['early_pay'] = False
 
 
 def print_state(block_address, stack, mem, global_state):
