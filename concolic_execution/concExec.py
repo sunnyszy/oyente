@@ -126,7 +126,7 @@ def main():
     if REPORT_MODE:
         rfile.write(str(total_no_of_paths) + "\n")
 
-    print('detecting...')
+    print "detecting..."
     detect_money_concurrency()
     detect_time_dependency()
     run_early_pay_attack()
@@ -481,7 +481,10 @@ def full_concolic_exec():
         try:
             directed, concolic_stack = instrumented_program(concolic_stack)
         except Exception as _e:
-            print(_e)
+            print str(_e)
+            if not forcing_ok:
+                # normally we need to generate a new random seed, but here don't have out loop, so we just break
+                break
             # execution won't stop on exception as there are multiple potential bugs
 
 
@@ -642,6 +645,7 @@ def conc_power(first, second):
     else:
         return (first ** second)%(2**256)
 
+
 # Symbolically executing a block from the start address
 def sym_exec_block(start, visited,
                    stack, stack_concrete,
@@ -679,7 +683,7 @@ def sym_exec_block(start, visited,
                          path_conditions_and_vars,
                          analysis)
         except Exception as e:
-            print(e)
+            print str(e)
             return False, -1, k
 
     # Mark that this basic block in the visited blocks
@@ -734,7 +738,7 @@ def sym_exec_block(start, visited,
             right_branch = vertices[start].get_falls_to()
             return True, right_branch, k+1
     else:
-            print('Unknown Jump-Type')
+            print 'Unknown Jump-Type'
             return False, -1, k
 
 

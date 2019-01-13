@@ -89,7 +89,7 @@ def main():
 
     solc_p = subprocess.Popen(shlex.split(solc_cmd % args.source), stdout = subprocess.PIPE, stderr= subprocess.PIPE)
     solc_out, solc_err = solc_p.communicate()
-    print(solc_err)
+    print solc_err
 
     for (cname, bin_str) in re.findall(r"\n======= (.*?) =======\nBinary of the runtime part: \n(.*?)\n", solc_out):
         print "Contract %s:" % cname
