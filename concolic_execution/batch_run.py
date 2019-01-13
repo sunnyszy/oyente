@@ -17,8 +17,6 @@ print "Loading contracts..."
 for cfile in cfiles:
     cjson.update(json.loads(open(cfile).read()))
 
-results = {}
-
 print "Running analysis..."
 
 contracts = cjson.keys()
@@ -48,12 +46,12 @@ for c in contracts:
     # exit(0)
     os.system('python2 oyente.py tmp_' + c + '.evm -j -b')
     try:
-        results[c] = json.loads(open('tmp_' + c + '.evm.json').read())
+        result = json.loads(open('tmp_' + c + '.evm.json').read())
     except:
-        results[c] = {}
+        result = {}
     # if cntnum == 2:
     with open('results_' + c + '.json', 'w') as of_result:
-        of_result.write(json.dumps(results, indent=1))
+        of_result.write(json.dumps(result, indent=1))
         # break
         cntnum += 1
 print "Completed."
