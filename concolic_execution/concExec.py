@@ -1516,7 +1516,6 @@ def sym_exec_ins(start, cur, instr,
                 stack.insert(0, 0)  # x = 0
                 stack_concrete.insert(0, 0)  # x = 0
             else:
-                # todo:
                 # the execution is possibly okay
                 stack.insert(0, 1)  # x = 1
                 stack_concrete.insert(0, 1)  # x = 1
@@ -1614,7 +1613,6 @@ def sym_exec_ins(start, cur, instr,
             stack.pop(0)
             stack_concrete.pop(0)
             stack_concrete.pop(0)
-            # TODO
             pass
         else:
             raise ValueError('STACK underflow')
@@ -1642,7 +1640,6 @@ def sym_exec_ins(start, cur, instr,
         new_balance_concrete = conc_add(old_balance_concrete, transfer_amount_concrete)
         global_state["balance"][new_var_name] = new_balance
         global_state_concrete["balance"][new_var_name] = new_balance_concrete
-        # TODO
         return
 
     else:
